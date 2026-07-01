@@ -3,417 +3,721 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AutoVRP — Panel de control industrial</title>
+<title>AutoVRP — SCADA Industrial</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0a0e14; color: #c8d6e5; min-height: 100vh; padding: 24px; }
-  .header { display: flex; align-items: center; justify-content: space-between; max-width: 1280px; margin: 0 auto 24px; padding-bottom: 16px; border-bottom: 1px solid #1c2530; flex-wrap: wrap; gap: 12px; }
-  .header-title { display: flex; align-items: center; gap: 14px; }
-  .logo-box { width: 44px; height: 44px; background: #0d2438; border: 1px solid #1d4e6e; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-  .logo-box svg { width: 26px; height: 26px; }
-  .header-title h1 { font-size: 18px; font-weight: 600; color: #e8eef4; }
-  .header-title p { font-size: 11px; color: #5c7a99; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
-  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .btn-stop { display: flex; align-items: center; gap: 8px; background: #241010; border: 1px solid #5e1d1d; color: #ff5c5c; padding: 8px 18px; border-radius: 20px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-  .btn-stop:hover { background: #3a1414; }
-  .btn-stop svg { width: 16px; height: 16px; }
-  .status-pill { display: flex; align-items: center; gap: 8px; background: #0d2418; border: 1px solid #1d5e3e; padding: 8px 16px; border-radius: 20px; font-size: 12px; color: #5ee8a5; font-weight: 600; }
-  .status-pill.off { background: #241010; border-color: #5e1d1d; color: #ff5c5c; }
-  .status-pill.warn { background: #242010; border-color: #5e4e1d; color: #ffc944; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee8a5; animation: pulse 2s infinite; }
-  .status-pill.off .status-dot { background: #ff5c5c; animation: none; }
-  .status-pill.warn .status-dot { background: #ffc944; }
-  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.4} }
-  .container { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
-  .grid-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-  .grid-env { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
-  .grid-2col { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
-  @media(max-width:700px){ .grid-2col { grid-template-columns: 1fr; } }
-  .panel { background: #101620; border: 1px solid #1c2530; border-radius: 12px; padding: 18px 20px; }
-  .panel-title { font-size: 11px; color: #5c7a99; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
-  .panel-title svg { width: 14px; height: 14px; stroke: #5c7a99; }
-  .gauge-wrap { display: flex; flex-direction: column; align-items: center; }
-  .gauge-value { font-size: 30px; font-weight: 700; margin-top: -36px; }
-  .gauge-unit { font-size: 12px; color: #5c7a99; margin-top: 2px; }
-  .gauge-label-row { display: flex; justify-content: space-between; width: 100%; margin-top: 10px; font-size: 10px; color: #46586b; padding: 0 14px; }
-  .env-card { display: flex; align-items: center; gap: 14px; }
-  .env-icon { width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .env-icon svg { width: 24px; height: 24px; }
-  .env-data .env-name { font-size: 11px; color: #5c7a99; text-transform: uppercase; letter-spacing: 1px; }
-  .env-data .env-value { font-size: 22px; font-weight: 700; margin-top: 2px; }
-  .env-data .env-state { font-size: 11px; margin-top: 2px; }
-  .icon-humid { background: #0d2438; } .icon-humid svg { stroke: #4a9aff; }
-  .icon-temp  { background: #1a1230; } .icon-temp svg  { stroke: #b06aff; }
-  .icon-float { background: #0d2438; } .icon-float svg { stroke: #4a9aff; }
-  .icon-float.alert { background: #2e1010; } .icon-float.alert svg { stroke: #ff5c5c; }
-  .icon-light { background: #2e2410; transition: background 0.3s; } .icon-light svg { stroke: #5c5440; transition: stroke 0.3s; }
-  .icon-light.on { background: #3a2e10; } .icon-light.on svg { stroke: #ffc944; }
-  .light-toggle { width: 44px; height: 44px; border-radius: 10px; border: 1px solid #1c2530; background: #0a0e14; color: #5c7a99; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink: 0; }
-  .light-toggle svg { width: 20px; height: 20px; }
-  .light-toggle.on { background: #2e2410; border-color: #5a4a1a; color: #ffc944; }
-  .valve-wrap { display: flex; align-items: center; justify-content: center; padding: 10px 0 4px; }
-  .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; background: #0a0e14; border-radius: 10px; padding: 4px; }
-  .mode-btn { flex: 1; padding: 10px; border-radius: 8px; border: none; background: transparent; color: #5c7a99; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-  .mode-btn.active { background: #1d4e6e; color: #e8eef4; }
-  .setpoint-row { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
-  .setpoint-display { font-size: 36px; font-weight: 700; color: #5ee8a5; min-width: 90px; }
-  .setpoint-display.warn { color: #ff5c5c; }
-  input[type=range] { flex: 1; height: 6px; border-radius: 3px; background: #1c2530; outline: none; -webkit-appearance: none; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #5ee8a5; cursor: pointer; border: 3px solid #0a0e14; }
-  .alerta-setpoint { background: #241010; border: 1px solid #5e1d1d; color: #ff5c5c; padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-top: 8px; display: none; }
-  .estado-pid { text-align: center; font-size: 12px; font-weight: 600; padding: 8px; border-radius: 8px; margin: 8px 0; background: #0a0e14; }
-  .volume-row { display: flex; align-items: center; gap: 14px; }
-  .btn-vol { width: 56px; height: 56px; border-radius: 50%; border: 2px solid #1c2530; background: #0a0e14; color: #e8eef4; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; font-size: 28px; font-weight: 700; }
-  .btn-vol:hover { background: #1c2530; } .btn-vol:active { transform: scale(0.90); }
-  .btn-vol.minus { color: #4a9aff; border-color: #1d3a5e; }
-  .btn-vol.plus  { color: #ffc944; border-color: #5a4a1a; }
-  .volume-track { flex: 1; height: 10px; background: #1c2530; border-radius: 5px; overflow: hidden; }
-  .volume-fill { height: 100%; background: #5ee8a5; border-radius: 5px; transition: width 0.4s ease; }
-  .progress-track { height: 10px; background: #0a0e14; border-radius: 6px; overflow: hidden; margin: 12px 0; }
-  .progress-fill { height: 100%; border-radius: 6px; transition: width 0.6s ease, background 0.3s; }
-  .signal-bars { display: flex; align-items: flex-end; gap: 4px; height: 28px; }
-  .sig-bar { flex: 1; background: #1c2530; border-radius: 2px 2px 0 0; transition: background 0.3s; }
-  .sig-bar.active { background: #5ee8a5; }
-  .info-row { display: flex; justify-content: space-between; font-size: 12px; color: #5c7a99; padding: 6px 0; border-bottom: 1px solid #161e29; }
-  .info-row:last-child { border-bottom: none; } .info-row .val { color: #c8d6e5; font-weight: 600; }
-  .water-flow { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 10px 0; }
-  .drop { animation: drop-fall 1.6s infinite; } .drop:nth-child(2){animation-delay:0.3s} .drop:nth-child(3){animation-delay:0.6s}
-  @keyframes drop-fall { 0%{opacity:0;transform:translateY(-4px)}30%{opacity:1}100%{opacity:0;transform:translateY(10px)} }
-  .log-box { background: #0a0e14; border-radius: 8px; padding: 10px; height: 120px; overflow-y: auto; font-size: 11px; font-family: Consolas, monospace; }
-  .log-line { color: #46586b; padding: 2px 0; } .log-line.ok{color:#5ee8a5} .log-line.warn{color:#ffc944} .log-line.err{color:#ff5c5c}
-  .pid-row { display: flex; gap: 8px; margin-top: 8px; }
-  .pid-field { flex: 1; }
-  .pid-field label { font-size: 10px; color: #5c7a99; display: block; margin-bottom: 4px; }
-  .pid-field input { width: 100%; background: #0a0e14; border: 1px solid #1c2530; color: #5ee8a5; padding: 6px; border-radius: 6px; font-family: inherit; font-size: 13px; text-align: center; }
-  .sin-conexion { text-align:center; padding: 40px; color: #5c7a99; font-size: 13px; }
-  .ultima-act { font-size: 10px; color: #46586b; text-align: right; margin-top: 4px; }
+  :root {
+    --bg:       #060a0f;
+    --bg2:      #0c1118;
+    --bg3:      #111820;
+    --border:   #1a2535;
+    --border2:  #243040;
+    --text:     #c8d6e5;
+    --text2:    #5c7a99;
+    --text3:    #3a5068;
+    --green:    #00e5a0;
+    --blue:     #3a9aff;
+    --yellow:   #ffc030;
+    --red:      #ff4444;
+    --purple:   #a060ff;
+  }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    background: var(--bg2); border-bottom: 1px solid var(--border);
+    padding: 0 28px; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 20px; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; background: linear-gradient(135deg,#0d3060,#0d5090); border: 1px solid #1d5090; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+  .logo-icon svg { width: 18px; height: 18px; }
+  .logo-text { font-size: 15px; font-weight: 700; color: #e0eaf4; letter-spacing: 0.5px; }
+  .logo-sub  { font-size: 10px; color: var(--text2); letter-spacing: 2px; text-transform: uppercase; }
+  .divider-v { width: 1px; height: 28px; background: var(--border); }
+  .sys-tag { font-size: 11px; color: var(--text2); letter-spacing: 1px; text-transform: uppercase; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .pill { display: flex; align-items: center; gap: 7px; padding: 6px 14px; border-radius: 4px; font-size: 11px; font-weight: 600; border: 1px solid; }
+  .pill-green { background: #001f14; border-color: #00522a; color: var(--green); }
+  .pill-red   { background: #1f0000; border-color: #520000; color: var(--red);   }
+  .pill-yellow{ background: #1f1500; border-color: #524000; color: var(--yellow);}
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-green  { background: var(--green);  animation: blink 2s infinite; }
+  .dot-red    { background: var(--red);    animation: blink 0.8s infinite; }
+  .dot-yellow { background: var(--yellow); animation: blink 1.5s infinite; }
+  @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.3} }
+  .btn-stop {
+    display: flex; align-items: center; gap: 8px;
+    background: #2a0808; border: 1px solid #6a1010; color: var(--red);
+    padding: 7px 16px; border-radius: 4px; font-size: 12px; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: background 0.15s; letter-spacing: 0.5px;
+  }
+  .btn-stop:hover { background: #3a1010; }
+  .clock { font-size: 12px; color: var(--text2); font-family: Consolas, monospace; letter-spacing: 1px; }
+
+  /* ── LAYOUT ── */
+  .main { max-width: 1440px; margin: 0 auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── PANELS ── */
+  .panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    background: var(--bg3); border-radius: 6px 6px 0 0;
+  }
+  .panel-head-left { display: flex; align-items: center; gap: 8px; }
+  .panel-tag { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
+  .panel-badge { font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 700; }
+  .badge-green  { background: #002818; color: var(--green);  border: 1px solid #005030; }
+  .badge-blue   { background: #001828; color: var(--blue);   border: 1px solid #003060; }
+  .badge-yellow { background: #201000; color: var(--yellow); border: 1px solid #504000; }
+  .badge-red    { background: #200000; color: var(--red);    border: 1px solid #500000; }
+  .panel-body { padding: 16px; }
+
+  /* ── GRID LAYOUTS ── */
+  .row-gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .row-env    { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .row-main   { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; }
+  .row-bottom { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; }
+  @media(max-width:900px) {
+    .row-gauges,.row-env,.row-main,.row-bottom { grid-template-columns: 1fr; }
+  }
+
+  /* ── GAUGE ── */
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 8px 0; }
+  .gauge-val  { font-size: 28px; font-weight: 700; margin-top: -32px; font-family: Consolas, monospace; }
+  .gauge-mpa  { font-size: 11px; color: var(--text2); margin-top: 4px; font-family: Consolas, monospace; }
+  .gauge-scale{ display: flex; justify-content: space-between; width: 100%; padding: 0 18px; margin-top: 8px; font-size: 10px; color: var(--text3); }
+  .gauge-bar-wrap { width: 100%; height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .gauge-bar  { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+
+  /* ── ENV CARDS ── */
+  .env-card { display: flex; align-items: center; gap: 14px; padding: 16px; }
+  .env-icon { width: 44px; height: 44px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .env-icon svg { width: 22px; height: 22px; }
+  .env-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 1.5px; }
+  .env-val   { font-size: 22px; font-weight: 700; margin-top: 3px; font-family: Consolas, monospace; }
+  .env-state { font-size: 11px; margin-top: 2px; }
+
+  /* ── VALVE CONTROL ── */
+  .mode-row { display: flex; gap: 6px; margin-bottom: 14px; }
+  .mode-btn { flex: 1; padding: 9px; border-radius: 4px; border: 1px solid var(--border2); background: var(--bg); color: var(--text2); font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.2s; letter-spacing: 0.5px; text-transform: uppercase; }
+  .mode-btn.active { background: #001830; border-color: #004080; color: var(--blue); }
+  .sp-row { display: flex; align-items: center; gap: 16px; margin: 12px 0; }
+  .sp-val { font-size: 38px; font-weight: 700; color: var(--green); min-width: 80px; font-family: Consolas, monospace; }
+  .sp-val.warn { color: var(--red); }
+  input[type=range] { flex: 1; height: 5px; border-radius: 3px; background: var(--border2); outline: none; -webkit-appearance: none; cursor: pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--green); border: 3px solid var(--bg); cursor: pointer; }
+  .pid-row { display: flex; gap: 8px; margin-top: 10px; }
+  .pid-field label { font-size: 10px; color: var(--text2); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+  .pid-field input { width: 100%; background: var(--bg); border: 1px solid var(--border2); color: var(--green); padding: 6px 8px; border-radius: 4px; font-family: Consolas, monospace; font-size: 13px; text-align: center; }
+  .progress-wrap { margin: 12px 0; }
+  .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 5px; }
+  .progress-track { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; border: 1px solid var(--border); }
+  .progress-fill  { height: 100%; border-radius: 4px; transition: width 0.5s ease, background 0.3s; }
+  .estado-pid { text-align: center; font-size: 11px; font-weight: 700; padding: 7px; border-radius: 4px; margin: 8px 0; background: var(--bg); border: 1px solid var(--border); letter-spacing: 1px; text-transform: uppercase; }
+  .alerta-sp  { background: #200000; border: 1px solid #500000; color: var(--red); padding: 8px 12px; border-radius: 4px; font-size: 11px; margin-top: 6px; display: none; }
+  .manual-psi { text-align: center; margin: 10px 0; }
+  .manual-psi span { font-size: 40px; font-weight: 700; color: var(--green); font-family: Consolas, monospace; }
+  .vol-row { display: flex; align-items: center; gap: 12px; }
+  .btn-vol { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--border2); background: var(--bg); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; transition: all 0.15s; flex-shrink: 0; }
+  .btn-vol:active { transform: scale(0.88); }
+  .btn-vol.minus { color: var(--blue);   border-color: #1a3a60; }
+  .btn-vol.plus  { color: var(--yellow); border-color: #504010; }
+  .vol-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .vol-fill  { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.4s; }
+
+  /* ── VALVE SVG ── */
+  .valve-section { display: flex; flex-direction: column; align-items: center; padding: 8px 0 4px; }
+
+  /* ── LORA PANEL ── */
+  .info-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text2); padding: 7px 0; border-bottom: 1px solid #0e1620; }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .val { color: var(--text); font-weight: 600; font-family: Consolas, monospace; font-size: 12px; }
+  .sig-bars { display: flex; align-items: flex-end; gap: 4px; height: 26px; margin: 8px 0; }
+  .sig-bar  { flex: 1; max-width: 14px; background: var(--border); border-radius: 2px 2px 0 0; transition: background 0.3s; }
+  .sig-bar.on { background: var(--green); }
+
+  /* ── HISTORIAL CHART ── */
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* ── LOG COMPLETO ── */
+  .log-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg3); }
+  .log-filter-btn { padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border2); background: transparent; color: var(--text2); font-size: 10px; font-weight: 700; cursor: pointer; font-family: inherit; text-transform: uppercase; letter-spacing: 1px; transition: all 0.15s; }
+  .log-filter-btn.active { background: var(--bg3); border-color: var(--blue); color: var(--blue); }
+  .log-count { font-size: 10px; color: var(--text3); margin-left: auto; font-family: Consolas, monospace; }
+  .log-clear { padding: 4px 10px; border-radius: 3px; border: 1px solid #3a1010; background: transparent; color: var(--red); font-size: 10px; font-weight: 700; cursor: pointer; font-family: inherit; text-transform: uppercase; }
+  .log-scroll { height: 200px; overflow-y: auto; padding: 6px 0; }
+  .log-scroll::-webkit-scrollbar { width: 4px; }
+  .log-scroll::-webkit-scrollbar-track { background: var(--bg); }
+  .log-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .log-entry { display: grid; grid-template-columns: 72px 46px 1fr; gap: 8px; padding: 5px 16px; font-size: 11px; font-family: Consolas, monospace; border-bottom: 1px solid #0a1018; align-items: center; }
+  .log-entry:hover { background: #0e1620; }
+  .log-time  { color: var(--text3); }
+  .log-type  { text-align: center; padding: 2px 0; border-radius: 2px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+  .log-type.CMD  { background: #001428; color: var(--blue);   border: 1px solid #002848; }
+  .log-type.OK   { background: #001e10; color: var(--green);  border: 1px solid #003020; }
+  .log-type.WARN { background: #1e1400; color: var(--yellow); border: 1px solid #3e2800; }
+  .log-type.ERR  { background: #1e0000; color: var(--red);    border: 1px solid #3e0000; }
+  .log-type.SYS  { background: #180028; color: var(--purple); border: 1px solid #300050; }
+  .log-msg   { color: var(--text); }
+
+  /* ── HISTORIAL PRESIONES TABLE ── */
+  .hist-table { width: 100%; border-collapse: collapse; font-size: 11px; font-family: Consolas, monospace; }
+  .hist-table th { padding: 6px 10px; text-align: left; color: var(--text2); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid var(--border); background: var(--bg3); }
+  .hist-table td { padding: 5px 10px; border-bottom: 1px solid #0a1018; color: var(--text); }
+  .hist-table tr:hover td { background: #0e1620; }
+  .hist-scroll { max-height: 180px; overflow-y: auto; }
+  .hist-scroll::-webkit-scrollbar { width: 4px; }
+  .hist-scroll::-webkit-scrollbar-thumb { background: var(--border2); }
+
+  /* ── ALERTA ── */
+  .alerta-panel { display: none; border: 1px solid #6a0000; background: #1a0000; border-radius: 6px; padding: 14px 18px; }
+  .alerta-panel.show { display: flex; align-items: center; gap: 14px; }
+
+  /* ── MISC ── */
+  .water-drops { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 6px 0; }
+  .drop { animation: drop-f 1.6s infinite; }
+  .drop:nth-child(2){animation-delay:0.3s} .drop:nth-child(3){animation-delay:0.6s}
+  @keyframes drop-f { 0%{opacity:0;transform:translateY(-4px)}30%{opacity:1}100%{opacity:0;transform:translateY(10px)} }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-title">
-    <div class="logo-box"><svg viewBox="0 0 24 24" fill="none" stroke="#4a9aff" stroke-width="2"><path d="M12 2v6m0 0a6 6 0 0 1 6 6c0 4-6 8-6 8s-6-4-6-8a6 6 0 0 1 6-6z"/></svg></div>
-    <div><h1>AutoVRP — Control de presion</h1><p>Camara 1 — Cuenca, Ecuador</p></div>
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">
+      <div class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#3a9aff" stroke-width="2"><path d="M12 2v6m0 0a6 6 0 0 1 6 6c0 4-6 8-6 8s-6-4-6-8a6 6 0 0 1 6-6z"/></svg></div>
+      <div><div class="logo-text">AutoVRP</div><div class="logo-sub">SCADA v2.0</div></div>
+    </div>
+    <div class="divider-v"></div>
+    <div class="sys-tag">Camara 1 — Cuenca, Ecuador</div>
   </div>
-  <div class="header-right">
+  <div class="topbar-right">
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="pill pill-green" id="statusPill"><span class="dot dot-green" id="statusDot"></span><span id="statusTxt">Sistema en linea</span></div>
     <button class="btn-stop" onclick="pararMotor()">
-      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>
-      Parada de emergencia
+      <svg viewBox="0 0 24 24" width="14" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+      PARADA DE EMERGENCIA
     </button>
-    <div class="status-pill" id="statusPill"><span class="status-dot"></span><span id="statusTxt">Conectando...</span></div>
   </div>
 </div>
 
-<div class="container">
+<div class="main">
 
-  <div class="grid-gauges">
+  <!-- FILA 1: GAUGES -->
+  <div class="row-gauges">
+
+    <!-- P1 -->
     <div class="panel">
-      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/></svg>Presion aguas arriba (P1)</div>
-      <div class="gauge-wrap">
-        <svg viewBox="0 0 200 120" width="100%">
-          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#1c2530" stroke-width="14" stroke-linecap="round"/>
-          <path id="arcP1" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#4a9aff" stroke-width="14" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="127"/>
-          <line id="needleP1" x1="100" y1="100" x2="100" y2="35" stroke="#e8eef4" stroke-width="3" stroke-linecap="round" transform="rotate(-34 100 100)"/>
-          <circle cx="100" cy="100" r="6" fill="#e8eef4"/>
-        </svg>
-        <div class="gauge-value" id="valP1" style="color:#4a9aff">--</div>
-        <div class="gauge-unit"><span id="mpaP1">--</span> MPa</div>
-        <div class="gauge-label-row"><span>0</span><span>87</span><span>175</span></div>
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <span class="panel-tag">Presion P1 — Aguas arriba</span>
+        </div>
+        <span class="panel-badge badge-blue" id="badgeP1">ESTATICO</span>
       </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/></svg>Presion aguas abajo (P2)</div>
-      <div class="gauge-wrap">
-        <svg viewBox="0 0 200 120" width="100%">
-          <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#1c2530" stroke-width="14" stroke-linecap="round"/>
-          <path id="arcP2" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#5ee8a5" stroke-width="14" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="251"/>
-          <line id="needleP2" x1="100" y1="100" x2="100" y2="35" stroke="#e8eef4" stroke-width="3" stroke-linecap="round" transform="rotate(-90 100 100)"/>
-          <circle cx="100" cy="100" r="6" fill="#e8eef4"/>
-        </svg>
-        <div class="gauge-value" id="valP2" style="color:#5ee8a5">--</div>
-        <div class="gauge-unit"><span id="mpaP2">--</span> MPa</div>
-        <div class="gauge-label-row"><span>0</span><span>87</span><span>175</span></div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Posicion valvula</div>
-      <div class="gauge-wrap">
-        <div class="valve-wrap">
-          <svg viewBox="0 0 160 100" width="170">
-            <rect x="20" y="44" width="14" height="14" fill="#5c7a99"/>
-            <rect x="126" y="44" width="14" height="14" fill="#5c7a99"/>
-            <rect x="34" y="36" width="92" height="30" rx="4" fill="#101620" stroke="#1c2530" stroke-width="2"/>
-            <rect id="valveFill" x="38" y="40" width="0" height="22" rx="2" fill="#5ee8a5" opacity="0.5"/>
-            <text x="80" y="55" text-anchor="middle" fill="#e8eef4" font-size="13" font-weight="700" id="valvePct">0%</text>
+      <div class="panel-body">
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 200 115" width="100%">
+            <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#1a2535" stroke-width="12" stroke-linecap="round"/>
+            <path id="arcP1" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#3a9aff" stroke-width="12" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="127"/>
+            <line id="needleP1" x1="100" y1="100" x2="100" y2="38" stroke="#c8d6e5" stroke-width="2.5" stroke-linecap="round" transform="rotate(-34 100 100)"/>
+            <circle cx="100" cy="100" r="5" fill="#c8d6e5"/>
           </svg>
+          <div class="gauge-val" id="valP1" style="color:#3a9aff">--</div>
+          <div class="gauge-mpa" id="mpaP1">-- MPa</div>
+          <div class="gauge-scale"><span>0</span><span>87</span><span>175 PSI</span></div>
+          <div class="gauge-bar-wrap"><div class="gauge-bar" id="barP1" style="width:0%;background:#3a9aff"></div></div>
         </div>
-        <div class="gauge-value" id="valPasos" style="font-size:20px;margin-top:4px">-- pasos</div>
-        <div class="gauge-unit"><span id="valGrados">--</span> grados</div>
       </div>
     </div>
-  </div>
 
-  <div class="grid-env">
-    <div class="panel env-card">
-      <div class="env-icon icon-humid"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 0a6 6 0 0 1 6 6c0 4-6 8-6 8s-6-4-6-8a6 6 0 0 1 6-6z"/></svg></div>
-      <div class="env-data"><div class="env-name">Humedad camara</div><div class="env-value" id="humedadVal">--%</div><div class="env-state" id="humedadEst" style="color:#5ee8a5">--</div></div>
-    </div>
-    <div class="panel env-card">
-      <div class="env-icon icon-temp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg></div>
-      <div class="env-data"><div class="env-name">Temperatura camara</div><div class="env-value" id="tempVal">-- °C</div><div class="env-state" id="tempEst" style="color:#5ee8a5">--</div></div>
-    </div>
-    <div class="panel env-card">
-      <div class="env-icon icon-float" id="iconBoya"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 13h8M12 9v8"/></svg></div>
-      <div class="env-data"><div class="env-name">Sensor boya</div><div class="env-value" id="boyaVal" style="font-size:16px">--</div><div class="env-state" id="boyaEst" style="color:#5ee8a5">--</div></div>
-    </div>
-    <div class="panel env-card">
-      <div class="env-icon icon-light" id="iconLuz"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></div>
-      <div class="env-data" style="flex:1"><div class="env-name">Iluminacion camara</div><div class="env-value" id="luzEstado" style="font-size:16px">--</div><div class="env-state" id="movEstado" style="color:#46586b">--</div></div>
-      <button class="light-toggle" id="btnLuz" onclick="toggleLuz()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></button>
-    </div>
-  </div>
-
-  <div class="panel" id="alertaPanel" style="display:none;border-color:#5e1d1d;background:#241010">
-    <div style="display:flex;align-items:center;gap:12px">
-      <svg viewBox="0 0 24 24" width="22" fill="none" stroke="#ff5c5c" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
-      <div><div style="font-size:13px;font-weight:700;color:#ff5c5c">Movimiento detectado en la camara</div><div style="font-size:11px;color:#c47a7a" id="alertaHora">Acceso sin autorizacion</div></div>
-    </div>
-  </div>
-
-  <div class="grid-2col">
+    <!-- P2 -->
     <div class="panel">
-      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v6m0 0a6 6 0 0 1 6 6c0 4-6 8-6 8s-6-4-6-8a6 6 0 0 1 6-6z"/></svg>Control de la valvula</div>
-      <div class="mode-toggle">
-        <button class="mode-btn active" id="btnAuto" onclick="setModo('auto')">Modo automatico PID</button>
-        <button class="mode-btn" id="btnManual" onclick="setModo('manual')">Modo manual</button>
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <span class="panel-tag">Presion P2 — Aguas abajo</span>
+        </div>
+        <span class="panel-badge badge-green" id="badgeP2">EN LINEA</span>
       </div>
-
-      <div id="panelAuto">
-        <p style="font-size:12px;color:#5c7a99;margin-bottom:8px">Presion objetivo — max: <span id="maxPermitido" style="color:#ffc944">29</span> PSI</p>
-        <div class="setpoint-row">
-          <div class="setpoint-display" id="setpointVal">20</div>
-          <input type="range" min="1" max="29" value="20" id="sliderSetpoint"
-            oninput="actualizarSetpointLocal(this.value)"
-            onchange="enviarSetpoint(this.value)">
+      <div class="panel-body">
+        <div class="gauge-wrap">
+          <svg viewBox="0 0 200 115" width="100%">
+            <path d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#1a2535" stroke-width="12" stroke-linecap="round"/>
+            <path id="arcP2" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="#00e5a0" stroke-width="12" stroke-linecap="round" stroke-dasharray="251" stroke-dashoffset="251"/>
+            <line id="needleP2" x1="100" y1="100" x2="100" y2="38" stroke="#c8d6e5" stroke-width="2.5" stroke-linecap="round" transform="rotate(-90 100 100)"/>
+            <circle cx="100" cy="100" r="5" fill="#c8d6e5"/>
+          </svg>
+          <div class="gauge-val" id="valP2" style="color:#00e5a0">--</div>
+          <div class="gauge-mpa" id="mpaP2">-- MPa</div>
+          <div class="gauge-scale"><span>0</span><span>87</span><span>175 PSI</span></div>
+          <div class="gauge-bar-wrap"><div class="gauge-bar" id="barP2" style="width:0%;background:#00e5a0"></div></div>
         </div>
-        <div class="alerta-setpoint" id="alertaSetpoint">Setpoint supera la presion aguas arriba (P1). No es posible alcanzar ese valor.</div>
-        <div class="estado-pid" id="estadoPID" style="color:#5c7a99">Esperando datos...</div>
-        <div class="water-flow">
-          <svg class="drop" viewBox="0 0 24 24" width="14" fill="#4a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
-          <svg class="drop" viewBox="0 0 24 24" width="14" fill="#4a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
-          <svg class="drop" viewBox="0 0 24 24" width="14" fill="#4a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
-        </div>
-        <div class="progress-track"><div class="progress-fill" id="progresoAuto" style="width:0%"></div></div>
-        <p style="font-size:11px;color:#46586b;text-align:center"><span id="progAutoTxt">-- PSI actual de 20 PSI objetivo</span></p>
-        <div class="pid-row">
-          <div class="pid-field"><label>Kp</label><input type="number" id="inKp" value="8" step="0.5" onchange="enviarPID()"></div>
-          <div class="pid-field"><label>Ki</label><input type="number" id="inKi" value="0.5" step="0.1" onchange="enviarPID()"></div>
-          <div class="pid-field"><label>Kd</label><input type="number" id="inKd" value="2" step="0.5" onchange="enviarPID()"></div>
-        </div>
-      </div>
-
-      <div id="panelManual" style="display:none">
-        <p style="font-size:12px;color:#5c7a99;margin-bottom:6px">Presion actual aguas abajo</p>
-        <div style="text-align:center;margin-bottom:14px">
-          <span style="font-size:34px;font-weight:700;color:#5ee8a5" id="manualPsiVal">--</span>
-          <span style="font-size:13px;color:#5c7a99"> PSI</span>
-        </div>
-        <div class="volume-row">
-          <button class="btn-vol minus" onclick="girarManual('izq')">−</button>
-          <div class="volume-track"><div class="volume-fill" id="volumeFill" style="width:0%"></div></div>
-          <button class="btn-vol plus" onclick="girarManual('der')">+</button>
-        </div>
-        <p style="font-size:11px;color:#46586b;text-align:center;margin-top:12px">Cada toque mueve el motor un paso pequeno</p>
       </div>
     </div>
 
+    <!-- VALVULA -->
     <div class="panel">
-      <div class="panel-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 1 1 16 0M4 12h16"/></svg>Enlace LoRa</div>
-      <div class="info-row"><span>Estado</span><span class="val" id="loraEstado" style="color:#5c7a99">--</span></div>
-      <div style="margin:10px 0 14px">
-        <div style="display:flex;justify-content:space-between;font-size:11px;color:#5c7a99;margin-bottom:6px"><span>Calidad de senal</span><span style="color:#c8d6e5;font-weight:600" id="calidadTxt">--</span></div>
-        <div class="signal-bars" id="signalBars">
+      <div class="panel-head">
+        <span class="panel-tag">Posicion valvula</span>
+        <span class="panel-badge badge-blue" id="badgeValv">0%</span>
+      </div>
+      <div class="panel-body">
+        <div class="valve-section">
+          <svg viewBox="0 0 200 80" width="100%">
+            <rect x="10" y="32" width="16" height="16" fill="#3a5068" rx="2"/>
+            <rect x="174" y="32" width="16" height="16" fill="#3a5068" rx="2"/>
+            <rect x="26" y="24" width="148" height="32" rx="4" fill="#0c1118" stroke="#1a2535" stroke-width="2"/>
+            <rect id="valveFill" x="30" y="28" width="0" height="24" rx="2" fill="#00e5a0" opacity="0.3"/>
+            <rect id="valvePos"  x="30" y="24" width="3" height="32" fill="#00e5a0" opacity="0.8"/>
+            <text x="100" y="44" text-anchor="middle" fill="#e0eaf4" font-size="14" font-weight="700" font-family="Consolas,monospace" id="valvePct">0%</text>
+          </svg>
+          <div style="font-size:26px;font-weight:700;color:#00e5a0;font-family:Consolas,monospace;margin-top:4px" id="valPasos">-- pasos</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px" id="valGrados">-- grados</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FILA 2: ENV CARDS -->
+  <div class="row-env">
+    <div class="panel env-card">
+      <div class="env-icon" style="background:#001428"><svg viewBox="0 0 24 24" fill="none" stroke="#3a9aff" stroke-width="2"><path d="M12 2v6m0 0a6 6 0 0 1 6 6c0 4-6 8-6 8s-6-4-6-8a6 6 0 0 1 6-6z"/></svg></div>
+      <div><div class="env-label">Humedad camara</div><div class="env-val" id="humVal" style="color:#3a9aff">--%</div><div class="env-state" id="humEst" style="color:var(--text2)">--</div></div>
+    </div>
+    <div class="panel env-card">
+      <div class="env-icon" style="background:#180028"><svg viewBox="0 0 24 24" fill="none" stroke="#a060ff" stroke-width="2"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg></div>
+      <div><div class="env-label">Temperatura</div><div class="env-val" id="tempVal" style="color:#a060ff">-- °C</div><div class="env-state" id="tempEst" style="color:var(--text2)">--</div></div>
+    </div>
+    <div class="panel env-card" id="cardBoya">
+      <div class="env-icon" id="iconBoya" style="background:#001428"><svg viewBox="0 0 24 24" fill="none" stroke="#3a9aff" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 13h8M12 9v8"/></svg></div>
+      <div><div class="env-label">Sensor boya</div><div class="env-val" id="boyaVal" style="font-size:16px;color:var(--green)">Seca</div><div class="env-state" id="boyaEst" style="color:var(--green)">Sin inundacion</div></div>
+    </div>
+    <div class="panel env-card">
+      <div class="env-icon" id="iconLuz" style="background:#201400;transition:background 0.3s"><svg viewBox="0 0 24 24" fill="none" stroke="#504030" stroke-width="2" id="svgLuz"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></div>
+      <div style="flex:1"><div class="env-label">Iluminacion</div><div class="env-val" id="luzVal" style="font-size:16px;color:var(--text2)">Apagada</div><div class="env-state" id="movVal" style="color:var(--text3)">Sin movimiento</div></div>
+      <button onclick="toggleLuz()" style="background:var(--bg);border:1px solid var(--border2);color:var(--text2);width:36px;height:36px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center" id="btnLuz">
+        <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ALERTA MOVIMIENTO -->
+  <div class="alerta-panel" id="alertaPanel">
+    <svg viewBox="0 0 24 24" width="22" fill="none" stroke="#ff4444" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
+    <div><div style="font-size:13px;font-weight:700;color:var(--red)">ALERTA — Movimiento detectado en la camara</div><div style="font-size:11px;color:#c47a7a;margin-top:2px" id="alertaHora">Acceso no autorizado</div></div>
+  </div>
+
+  <!-- FILA 3: CONTROL + LORA -->
+  <div class="row-main">
+
+    <!-- CONTROL VALVULA -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-tag">Control de valvula</span>
+        <span class="panel-badge" id="badgeModo" style="background:#001428;color:#3a9aff;border:1px solid #003060">MANUAL</span>
+      </div>
+      <div class="panel-body">
+        <div class="mode-row">
+          <button class="mode-btn" id="btnAuto"   onclick="setModo('auto')">Automatico PID</button>
+          <button class="mode-btn active" id="btnManual" onclick="setModo('manual')">Manual</button>
+        </div>
+
+        <div id="panelAuto" style="display:none">
+          <div style="font-size:11px;color:var(--text2);margin-bottom:6px">Presion objetivo — max permitido: <span id="maxPermit" style="color:var(--yellow)">29</span> PSI</div>
+          <div class="sp-row">
+            <div class="sp-val" id="spVal">20</div>
+            <input type="range" min="1" max="29" value="20" id="sliderSP" oninput="spLocal(this.value)" onchange="enviarSP(this.value)">
+          </div>
+          <div class="alerta-sp" id="alertaSP">Setpoint supera P1. No es posible alcanzar ese valor.</div>
+          <div class="estado-pid" id="estadoPID" style="color:var(--text2)">MODO MANUAL ACTIVO</div>
+          <div class="water-drops">
+            <svg class="drop" viewBox="0 0 24 24" width="12" fill="#3a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
+            <svg class="drop" viewBox="0 0 24 24" width="12" fill="#3a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
+            <svg class="drop" viewBox="0 0 24 24" width="12" fill="#3a9aff"><path d="M12 2c4 5 6 8 6 11a6 6 0 1 1-12 0c0-3 2-6 6-11z"/></svg>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-label"><span>Progreso hacia setpoint</span><span id="progTxt">--</span></div>
+            <div class="progress-track"><div class="progress-fill" id="progFill" style="width:0%"></div></div>
+          </div>
+          <div class="pid-row">
+            <div class="pid-field"><label>Kp</label><input type="number" id="inKp" value="8"   step="0.5" onchange="enviarPID()"></div>
+            <div class="pid-field"><label>Ki</label><input type="number" id="inKi" value="0.5" step="0.1" onchange="enviarPID()"></div>
+            <div class="pid-field"><label>Kd</label><input type="number" id="inKd" value="2"   step="0.5" onchange="enviarPID()"></div>
+          </div>
+        </div>
+
+        <div id="panelManual">
+          <div class="manual-psi"><span id="manPsi">--</span> <span style="font-size:14px;color:var(--text2)">PSI</span></div>
+          <div class="vol-row">
+            <button class="btn-vol minus" onclick="girarManual('izq')">−</button>
+            <div class="vol-track"><div class="vol-fill" id="volFill" style="width:0%"></div></div>
+            <button class="btn-vol plus"  onclick="girarManual('der')">+</button>
+          </div>
+          <div style="font-size:11px;color:var(--text3);text-align:center;margin-top:10px">Cada toque mueve el motor 20 pasos</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LORA -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-tag">Enlace LoRa 915 MHz</span>
+        <span class="panel-badge" id="badgeLora" style="background:#001428;color:#3a9aff;border:1px solid #003060">SF9</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:4px"><span>Calidad de senal</span><span style="color:var(--text);font-weight:700" id="calidadTxt">--</span></div>
+        <div class="sig-bars" id="sigBars">
           <div class="sig-bar" style="height:20%"></div>
           <div class="sig-bar" style="height:40%"></div>
           <div class="sig-bar" style="height:60%"></div>
           <div class="sig-bar" style="height:80%"></div>
           <div class="sig-bar" style="height:100%"></div>
         </div>
+        <div class="info-row"><span>Estado</span><span class="val" id="loraEst" style="color:var(--text2)">--</span></div>
+        <div class="info-row"><span>RSSI</span><span class="val" id="rssiTxt">--</span></div>
+        <div class="info-row"><span>SNR</span><span class="val" id="snrTxt">--</span></div>
+        <div class="info-row"><span>Frecuencia</span><span class="val">915 MHz</span></div>
+        <div class="info-row"><span>Bandwidth</span><span class="val">125 kHz</span></div>
+        <div class="info-row"><span>Spreading factor</span><span class="val">SF9</span></div>
+        <div class="info-row"><span>Sincronizacion</span><span class="val" id="ultimaActTxt" style="font-size:11px">--</span></div>
       </div>
-      <div class="info-row"><span>RSSI</span><span class="val" id="rssiTxt">-- dBm</span></div>
-      <div class="info-row"><span>SNR</span><span class="val" id="snrTxt">-- dB</span></div>
-      <div class="info-row"><span>Frecuencia</span><span class="val">915 MHz</span></div>
-      <div class="info-row"><span>Spreading factor</span><span class="val">SF9</span></div>
-      <div class="info-row"><span>Ultima actualizacion</span><span class="val" id="ultimaActTxt" style="font-size:10px">--</span></div>
-      <div class="panel-title" style="margin-top:18px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>Registro de eventos</div>
-      <div class="log-box" id="logBox"></div>
     </div>
+
   </div>
 
-</div>
+  <!-- FILA 4: GRAFICA HISTORICA + TABLA -->
+  <div class="row-bottom">
+
+    <!-- GRAFICA -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <span class="panel-tag">Historial de presiones</span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:11px">
+          <span style="color:#3a9aff">— P1</span>
+          <span style="color:#00e5a0">— P2</span>
+          <span style="color:var(--yellow)">— Setpoint</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap"><canvas id="chartPresion"></canvas></div>
+      </div>
+    </div>
+
+    <!-- TABLA HISTORICA -->
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-tag">Registro de presiones</span>
+        <button onclick="limpiarTabla()" style="font-size:10px;padding:3px 8px;border-radius:3px;border:1px solid #3a1010;background:transparent;color:var(--red);cursor:pointer;font-family:inherit">Limpiar</button>
+      </div>
+      <div class="hist-scroll">
+        <table class="hist-table">
+          <thead><tr><th>Hora</th><th>P1 PSI</th><th>P2 PSI</th><th>Estado</th></tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FILA 5: LOG COMPLETO -->
+  <div class="panel">
+    <div class="panel-head">
+      <span class="panel-tag">Registro de eventos del sistema</span>
+    </div>
+    <div class="log-toolbar">
+      <button class="log-filter-btn active" onclick="filtrarLog('ALL',this)">TODOS</button>
+      <button class="log-filter-btn" onclick="filtrarLog('CMD',this)">CMD</button>
+      <button class="log-filter-btn" onclick="filtrarLog('OK',this)">OK</button>
+      <button class="log-filter-btn" onclick="filtrarLog('WARN',this)">WARN</button>
+      <button class="log-filter-btn" onclick="filtrarLog('ERR',this)">ERR</button>
+      <button class="log-filter-btn" onclick="filtrarLog('SYS',this)">SYS</button>
+      <span class="log-count" id="logCount">0 eventos</span>
+      <button class="log-clear" onclick="limpiarLog()">Limpiar</button>
+    </div>
+    <div class="log-scroll" id="logScroll"></div>
+  </div>
+
+</div><!-- /main -->
 
 <script>
-let modo = 'auto';
-let setpointLocal = 20;
+// ── ESTADO ──────────────────────────────────────────────────────
+let modo = 'manual';
+let spLocal_val = 20;
 let p1Actual = 30.0;
-let sinDatos = true;
+let logEntries = [];
+let logFiltro = 'ALL';
+let historialTabla = [];
+const MAX_LOG = 500;
+const MAX_HIST_TABLA = 100;
 
+// ── CHART ────────────────────────────────────────────────────────
+const ctx = document.getElementById('chartPresion').getContext('2d');
+const chartData = { labels: [], p1: [], p2: [], sp: [] };
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: chartData.labels,
+    datasets: [
+      { label:'P1', data: chartData.p1, borderColor:'#3a9aff', backgroundColor:'rgba(58,154,255,0.05)', borderWidth:2, pointRadius:0, tension:0.3 },
+      { label:'P2', data: chartData.p2, borderColor:'#00e5a0', backgroundColor:'rgba(0,229,160,0.05)', borderWidth:2, pointRadius:0, tension:0.3 },
+      { label:'SP', data: chartData.sp, borderColor:'#ffc030', backgroundColor:'transparent',            borderWidth:1.5, pointRadius:0, tension:0, borderDash:[6,4] }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color:'#3a5068', font:{ size:10, family:'Consolas' }, maxTicksLimit:10 }, grid: { color:'#0e1620' } },
+      y: { ticks: { color:'#3a5068', font:{ size:10, family:'Consolas' } }, grid: { color:'#0e1620' }, min:0 }
+    }
+  }
+});
+
+function agregarPuntoChart(p1, p2, sp) {
+  const t = new Date().toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  chartData.labels.push(t);
+  chartData.p1.push(p1);
+  chartData.p2.push(p2);
+  chartData.sp.push(sp);
+  if (chartData.labels.length > 60) {
+    chartData.labels.shift(); chartData.p1.shift(); chartData.p2.shift(); chartData.sp.shift();
+  }
+  chart.update('none');
+}
+
+// ── LOG ──────────────────────────────────────────────────────────
+function agregarLog(msg, tipo) {
+  tipo = tipo || 'OK';
+  const t = new Date().toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  logEntries.unshift({ t, tipo, msg });
+  if (logEntries.length > MAX_LOG) logEntries.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const scroll = document.getElementById('logScroll');
+  const filtrados = logFiltro === 'ALL' ? logEntries : logEntries.filter(e => e.tipo === logFiltro);
+  document.getElementById('logCount').textContent = filtrados.length + ' eventos';
+  scroll.innerHTML = filtrados.map(e =>
+    `<div class="log-entry">
+      <span class="log-time">${e.t}</span>
+      <span class="log-type ${e.tipo}">${e.tipo}</span>
+      <span class="log-msg">${e.msg}</span>
+    </div>`
+  ).join('');
+}
+
+function filtrarLog(f, btn) {
+  logFiltro = f;
+  document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLog();
+}
+
+function limpiarLog() { logEntries = []; renderLog(); }
+
+// ── TABLA HISTORICA ──────────────────────────────────────────────
+function agregarFilaTabla(p1, p2, estado) {
+  const t = new Date().toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  historialTabla.unshift({ t, p1: p1.toFixed(1), p2: p2.toFixed(1), estado });
+  if (historialTabla.length > MAX_HIST_TABLA) historialTabla.pop();
+  const body = document.getElementById('histBody');
+  body.innerHTML = historialTabla.map(r =>
+    `<tr><td>${r.t}</td><td style="color:#3a9aff">${r.p1}</td><td style="color:#00e5a0">${r.p2}</td><td style="color:var(--text2)">${r.estado}</td></tr>`
+  ).join('');
+}
+
+function limpiarTabla() { historialTabla = []; document.getElementById('histBody').innerHTML = ''; }
+
+// ── RELOJ ────────────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-EC', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ── MODOS ────────────────────────────────────────────────────────
 function setModo(m) {
   modo = m;
-  document.getElementById('btnAuto').classList.toggle('active', m==='auto');
+  document.getElementById('btnAuto').classList.toggle('active',   m==='auto');
   document.getElementById('btnManual').classList.toggle('active', m==='manual');
-  document.getElementById('panelAuto').style.display = m==='auto' ? 'block' : 'none';
+  document.getElementById('panelAuto').style.display   = m==='auto'   ? 'block' : 'none';
   document.getElementById('panelManual').style.display = m==='manual' ? 'block' : 'none';
-  fetch('/cmd?c=MODO'+(m==='auto'?'1':'0')).then(()=>agregarLog('Modo: '+m.toUpperCase()));
+  document.getElementById('badgeModo').textContent = m==='auto' ? 'AUTO PID' : 'MANUAL';
+  fetch('/cmd?c=MODO'+(m==='auto'?'1':'0')).then(()=>agregarLog('Modo cambiado: '+m.toUpperCase(),'CMD'));
 }
 
-function actualizarSetpointLocal(v) {
-  setpointLocal = parseFloat(v);
-  document.getElementById('setpointVal').textContent = setpointLocal;
-  let alerta = document.getElementById('alertaSetpoint');
-  let disp   = document.getElementById('setpointVal');
-  if (setpointLocal >= p1Actual) {
-    alerta.style.display = 'block'; disp.classList.add('warn');
-  } else {
-    alerta.style.display = 'none'; disp.classList.remove('warn');
-  }
+function spLocal(v) {
+  spLocal_val = parseFloat(v);
+  document.getElementById('spVal').textContent = spLocal_val;
+  const warn = spLocal_val >= p1Actual;
+  document.getElementById('alertaSP').style.display = warn ? 'block' : 'none';
+  document.getElementById('spVal').classList.toggle('warn', warn);
 }
 
-function enviarSetpoint(v) {
-  if (parseFloat(v) >= p1Actual) {
-    agregarLog('Setpoint rechazado: supera P1 ('+p1Actual+' PSI)', 'err'); return;
-  }
-  fetch('/cmd?c=SET'+v).then(()=>agregarLog('Setpoint: '+v+' PSI'));
+function enviarSP(v) {
+  if (parseFloat(v) >= p1Actual) { agregarLog('Setpoint rechazado: supera P1 ('+p1Actual+' PSI)','ERR'); return; }
+  fetch('/cmd?c=SET'+v).then(()=>agregarLog('Setpoint enviado: '+v+' PSI','CMD'));
 }
 
 function enviarPID() {
-  let kp=document.getElementById('inKp').value;
-  let ki=document.getElementById('inKi').value;
-  let kd=document.getElementById('inKd').value;
-  fetch('/cmd?c=PID'+kp+','+ki+','+kd).then(()=>agregarLog('PID Kp='+kp+' Ki='+ki+' Kd='+kd));
+  const kp=document.getElementById('inKp').value;
+  const ki=document.getElementById('inKi').value;
+  const kd=document.getElementById('inKd').value;
+  fetch('/cmd?c=PID'+kp+','+ki+','+kd).then(()=>agregarLog('PID actualizado Kp='+kp+' Ki='+ki+' Kd='+kd,'CMD'));
 }
 
 function pararMotor() {
-  fetch('/cmd?c=STOP').then(()=>agregarLog('PARADA DE EMERGENCIA','warn'));
+  fetch('/cmd?c=STOP').then(()=>agregarLog('!! PARADA DE EMERGENCIA !!','WARN'));
 }
 
 function girarManual(dir) {
-  let c = dir==='der' ? 'D20' : 'I20';
-  fetch('/cmd?c='+c).then(()=>agregarLog('Motor: '+c));
+  const c = dir==='der' ? 'D20' : 'I20';
+  fetch('/cmd?c='+c).then(()=>agregarLog('Motor: '+c,'CMD'));
 }
 
 function toggleLuz() {
-  fetch('/cmd?c=LUZTOGGLE').then(()=>agregarLog('Luz toggle'));
+  fetch('/cmd?c=LUZTOGGLE').then(()=>agregarLog('Luz: toggle','CMD'));
 }
 
-function agregarLog(msg, tipo) {
-  let d = document.getElementById('logBox');
-  let t = new Date().toLocaleTimeString();
-  let div = document.createElement('div');
-  div.className = 'log-line '+(tipo||'ok');
-  div.textContent = '['+t+'] '+msg;
-  d.insertBefore(div, d.firstChild);
-  while(d.children.length > 10) d.removeChild(d.lastChild);
-}
+// ── ACTUALIZAR ───────────────────────────────────────────────────
+let prevP2 = null;
+let ciclo = 0;
 
 function actualizar() {
   fetch('/datos').then(r=>r.json()).then(d=>{
-    sinDatos = false;
 
     p1Actual = d.presionP1;
+
+    // P1
     document.getElementById('valP1').textContent = d.presionP1.toFixed(1);
-    document.getElementById('mpaP1').textContent = (d.presionP1/145.038).toFixed(3);
-    document.getElementById('maxPermitido').textContent = Math.floor(d.presionP1-1);
-    document.getElementById('sliderSetpoint').max = Math.floor(d.presionP1-1);
+    document.getElementById('mpaP1').textContent = (d.presionP1/145.038).toFixed(3)+' MPa';
     let f1 = Math.min(1, d.presionP1/175);
     document.getElementById('arcP1').setAttribute('stroke-dashoffset', 251-f1*251);
     document.getElementById('needleP1').setAttribute('transform','rotate('+(-90+f1*180)+' 100 100)');
+    document.getElementById('barP1').style.width = (f1*100)+'%';
 
+    // P2
     document.getElementById('valP2').textContent = d.presionP2.toFixed(1);
-    document.getElementById('mpaP2').textContent = (d.presionP2/145.038).toFixed(3);
+    document.getElementById('mpaP2').textContent = (d.presionP2/145.038).toFixed(3)+' MPa';
     let f2 = Math.min(1, d.presionP2/175);
     document.getElementById('arcP2').setAttribute('stroke-dashoffset', 251-f2*251);
     document.getElementById('needleP2').setAttribute('transform','rotate('+(-90+f2*180)+' 100 100)');
-    document.getElementById('manualPsiVal').textContent = d.presionP2.toFixed(1);
-    document.getElementById('volumeFill').style.width = Math.min(100,(d.presionP2/Math.max(1,d.presionP1))*100)+'%';
+    document.getElementById('barP2').style.width = (f2*100)+'%';
+    document.getElementById('manPsi').textContent = d.presionP2.toFixed(1);
+    document.getElementById('volFill').style.width = Math.min(100,(d.presionP2/Math.max(1,d.presionP1))*100)+'%';
 
-    let diff = Math.abs(d.presionP2 - setpointLocal);
-    let pct  = Math.max(0, 100-(diff/Math.max(1,setpointLocal))*100);
-    let pf   = document.getElementById('progresoAuto');
+    // Setpoint
+    document.getElementById('maxPermit').textContent = Math.floor(d.presionP1-1);
+    document.getElementById('sliderSP').max = Math.floor(d.presionP1-1);
+
+    // Progreso PID
+    let diff = Math.abs(d.presionP2 - spLocal_val);
+    let pct  = Math.max(0, 100-(diff/Math.max(1,spLocal_val))*100);
+    let pf = document.getElementById('progFill');
     pf.style.width = Math.min(100,pct)+'%';
-    pf.style.background = diff<1.5 ? '#5ee8a5' : diff<5 ? '#ffc944' : '#ff5c5c';
-    document.getElementById('progAutoTxt').textContent = d.presionP2.toFixed(1)+' PSI actual de '+setpointLocal+' PSI objetivo';
+    pf.style.background = diff<1.5 ? '#00e5a0' : diff<5 ? '#ffc030' : '#ff4444';
+    document.getElementById('progTxt').textContent = d.presionP2.toFixed(1)+' / '+spLocal_val+' PSI';
 
-    let estadoEl = document.getElementById('estadoPID');
+    // Estado PID
+    let estEl = document.getElementById('estadoPID');
     if (d.modoAuto) {
-      if (d.estado==='EN SETPOINT') { estadoEl.textContent='EN SETPOINT — presion estable'; estadoEl.style.color='#5ee8a5'; }
-      else if (d.estado==='ESTABILIZANDO') { estadoEl.textContent='Esperando estabilizacion...'; estadoEl.style.color='#ffc944'; }
-      else { estadoEl.textContent='PID activo — ajustando: '+d.estado; estadoEl.style.color='#4a9aff'; }
-    } else {
-      estadoEl.textContent='Modo manual activo'; estadoEl.style.color='#5c7a99';
-    }
+      if (d.estado==='EN SETPOINT') { estEl.textContent='EN SETPOINT — PRESION ESTABLE'; estEl.style.color='#00e5a0'; }
+      else if (d.estado==='ESTABILIZANDO') { estEl.textContent='ESTABILIZANDO...'; estEl.style.color='#ffc030'; }
+      else { estEl.textContent='PID ACTIVO — '+d.estado; estEl.style.color='#3a9aff'; }
+    } else { estEl.textContent='MODO MANUAL ACTIVO'; estEl.style.color='var(--text2)'; }
 
-    document.getElementById('valPasos').textContent = d.pasos+' pasos';
-    document.getElementById('valGrados').textContent = d.grados.toFixed(1);
+    // Valvula
     let pct2 = Math.min(100,Math.max(0,Math.round((Math.abs(d.pasos)/400)*100)));
+    document.getElementById('valPasos').textContent = d.pasos+' pasos';
+    document.getElementById('valGrados').textContent = d.grados.toFixed(1)+' grados';
     document.getElementById('valvePct').textContent = pct2+'%';
-    document.getElementById('valveFill').setAttribute('width',(pct2/100)*50);
+    document.getElementById('badgeValv').textContent = pct2+'%';
+    document.getElementById('valveFill').setAttribute('width', (pct2/100)*140);
+    document.getElementById('valvePos').setAttribute('x', 30+(pct2/100)*140);
 
     // Humedad
-    let hum = d.humedad.toFixed(0);
-    document.getElementById('humedadVal').textContent = hum+'%';
-    document.getElementById('humedadEst').textContent = d.humedad > 80 ? 'Humedad alta' : d.humedad > 60 ? 'Normal' : 'Seca';
-    document.getElementById('humedadEst').style.color = d.humedad > 85 ? '#ff5c5c' : '#5ee8a5';
+    document.getElementById('humVal').textContent = d.humedad.toFixed(0)+'%';
+    document.getElementById('humEst').textContent = d.humedad>85?'ALTA':d.humedad>60?'Normal':'Seca';
+    document.getElementById('humEst').style.color = d.humedad>85?'#ff4444':'#00e5a0';
 
     // Temperatura
-    let temp = d.temperatura.toFixed(1);
-    document.getElementById('tempVal').textContent = temp+' °C';
-    document.getElementById('tempEst').textContent = d.temperatura > 35 ? 'Temperatura alta' : 'Normal';
-    document.getElementById('tempEst').style.color = d.temperatura > 35 ? '#ffc944' : '#5ee8a5';
+    document.getElementById('tempVal').textContent = d.temperatura.toFixed(1)+' °C';
+    document.getElementById('tempEst').textContent = d.temperatura>35?'ALTA':d.temperatura>0?'Normal':'--';
+    document.getElementById('tempEst').style.color = d.temperatura>35?'#ffc030':'#a060ff';
 
-    document.getElementById('boyaVal').textContent = d.boyaMojada?'Mojada':'Seca';
-    document.getElementById('boyaEst').textContent = d.boyaMojada?'INUNDACION':'Sin inundacion';
-    document.getElementById('boyaEst').style.color = d.boyaMojada?'#ff5c5c':'#5ee8a5';
-    document.getElementById('iconBoya').classList.toggle('alert',d.boyaMojada);
+    // Boya
+    document.getElementById('boyaVal').textContent = d.boyaMojada?'MOJADA':'Seca';
+    document.getElementById('boyaEst').textContent = d.boyaMojada?'!! INUNDACION !!':'Sin inundacion';
+    document.getElementById('boyaVal').style.color = d.boyaMojada?'#ff4444':'#00e5a0';
+    document.getElementById('boyaEst').style.color = d.boyaMojada?'#ff4444':'#00e5a0';
+    document.getElementById('iconBoya').style.background = d.boyaMojada?'#200000':'#001428';
 
-    document.getElementById('iconLuz').classList.toggle('on',d.luzEncendida);
-    document.getElementById('btnLuz').classList.toggle('on',d.luzEncendida);
-    document.getElementById('luzEstado').textContent = d.luzEncendida?'Encendida':'Apagada';
-    document.getElementById('movEstado').textContent = d.movimiento?'Movimiento detectado':'Sin movimiento';
-    document.getElementById('movEstado').style.color = d.movimiento?'#ff5c5c':'#46586b';
-    document.getElementById('alertaPanel').style.display = d.movimiento?'block':'none';
+    // Luz / movimiento
+    const luzOn = d.luzEncendida;
+    document.getElementById('luzVal').textContent = luzOn?'Encendida':'Apagada';
+    document.getElementById('luzVal').style.color = luzOn?'#ffc030':'var(--text2)';
+    document.getElementById('iconLuz').style.background = luzOn?'#201000':'#201400';
+    document.getElementById('movVal').textContent = d.movimiento?'!! Movimiento detectado !!':'Sin movimiento';
+    document.getElementById('movVal').style.color = d.movimiento?'#ff4444':'var(--text3)';
+    document.getElementById('alertaPanel').classList.toggle('show', d.movimiento);
 
+    // LoRa
     document.getElementById('rssiTxt').textContent = d.rssi+' dBm';
-    document.getElementById('snrTxt').textContent = d.snr+' dB';
-    document.getElementById('loraEstado').textContent = d.rssi!=0?'Conectado':'Sin nodo';
-    document.getElementById('loraEstado').style.color = d.rssi!=0?'#5ee8a5':'#ff5c5c';
+    document.getElementById('snrTxt').textContent  = d.snr+' dB';
+    document.getElementById('loraEst').textContent = d.rssi!==0?'CONECTADO':'SIN NODO';
+    document.getElementById('loraEst').style.color = d.rssi!==0?'#00e5a0':'#ff4444';
     document.getElementById('calidadTxt').textContent = d.calidad;
-    document.querySelectorAll('#signalBars .sig-bar').forEach((b,i)=>b.classList.toggle('active',i<d.barras));
+    document.querySelectorAll('#sigBars .sig-bar').forEach((b,i)=>b.classList.toggle('on',i<d.barras));
 
     if (d.ultimaActualizacion) {
-      let f = new Date(d.ultimaActualizacion);
-      document.getElementById('ultimaActTxt').textContent = f.toLocaleTimeString();
+      const f = new Date(d.ultimaActualizacion);
+      document.getElementById('ultimaActTxt').textContent = f.toLocaleTimeString('es-EC');
     }
 
-    let pill = document.getElementById('statusPill');
-    let txt  = document.getElementById('statusTxt');
+    // Status pill
+    const pill = document.getElementById('statusPill');
+    const dot  = document.getElementById('statusDot');
+    const txt  = document.getElementById('statusTxt');
     if (d.boyaMojada) {
-      pill.className='status-pill off'; txt.textContent='Alerta inundacion';
-    } else if (d.rssi === 0) {
-      pill.className='status-pill warn'; txt.textContent='Sin enlace LoRa';
+      pill.className='pill pill-red'; dot.className='dot dot-red'; txt.textContent='ALERTA INUNDACION';
+    } else if (d.rssi===0) {
+      pill.className='pill pill-yellow'; dot.className='dot dot-yellow'; txt.textContent='Sin enlace LoRa';
     } else {
-      pill.className='status-pill'; txt.textContent='Sistema en linea';
+      pill.className='pill pill-green'; dot.className='dot dot-green'; txt.textContent='Sistema en linea';
     }
+
+    // Grafica y tabla cada 5 ciclos (~10s)
+    ciclo++;
+    if (ciclo % 5 === 0) {
+      agregarPuntoChart(d.presionP1, d.presionP2, spLocal_val);
+      agregarFilaTabla(d.presionP1, d.presionP2, d.estado);
+    }
+
+    // Log cuando P2 cambia significativamente
+    if (prevP2 !== null && Math.abs(d.presionP2 - prevP2) > 0.5) {
+      const tipo = d.presionP2 < spLocal_val - 3 ? 'WARN' : 'OK';
+      agregarLog('P2 cambio: '+prevP2.toFixed(1)+' → '+d.presionP2.toFixed(1)+' PSI | Estado: '+d.estado, tipo);
+    }
+    prevP2 = d.presionP2;
 
   }).catch(()=>{
-    if (!sinDatos) agregarLog('Sin respuesta del servidor','err');
-    document.getElementById('statusPill').className='status-pill off';
+    agregarLog('Sin respuesta del servidor','ERR');
+    document.getElementById('statusPill').className='pill pill-red';
     document.getElementById('statusTxt').textContent='Sin conexion';
   });
 }
+
+// Log de arranque
+agregarLog('Dashboard AutoVRP iniciado','SYS');
+agregarLog('Conectando con servidor Railway...','SYS');
 
 setInterval(actualizar, 2000);
 actualizar();
