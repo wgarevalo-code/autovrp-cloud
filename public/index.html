@@ -592,7 +592,7 @@ let prevP2 = null;
 let ciclo = 0;
 
 function actualizar() {
-  fetch('/datos').then(r=>r.json()).then(d=>{
+  fetch('/datos', { cache: 'no-store' }).then(r=>r.json()).then(d=>{
 
     p1Actual = d.presionP1;
 
