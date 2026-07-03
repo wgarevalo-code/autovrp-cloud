@@ -80,7 +80,8 @@ function tgAlerta(texto) {
 
 // ── Telegram: procesar comando ────────────────────────────────────
 function procesarComando(chatId, texto, req) {
-  const cmd = texto.trim().toLowerCase().split(' ')[0];
+  // Eliminar @BotName del comando si Telegram lo agrega
+  const cmd = texto.trim().toLowerCase().split(' ')[0].split('@')[0];
 
   const d = camara1;
   const sync = d.ultimaActualizacion
@@ -233,7 +234,7 @@ function procesarComando(chatId, texto, req) {
       );
       break;
 
-    case '/usuarios':
+    case '/usuarios': {
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede ver los usuarios.'); break; }
       if (usuarios.size === 0) { tgEnviar(chatId, 'No hay usuarios registrados.'); break; }
       let lista = '<b>👥 Usuarios registrados:</b>\n\n';
@@ -242,6 +243,7 @@ function procesarComando(chatId, texto, req) {
       });
       tgEnviar(chatId, lista);
       break;
+    }
 
     case '/autorizar': {
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede autorizar usuarios.'); break; }
