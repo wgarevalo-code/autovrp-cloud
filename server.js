@@ -80,7 +80,6 @@ function tgAlerta(texto) {
 
 // ── Telegram: procesar comando ────────────────────────────────────
 function procesarComando(chatId, texto, req) {
-  chatsAutorizados.add(chatId);
   const cmd = texto.trim().toLowerCase().split(' ')[0];
 
   const d = camara1;
