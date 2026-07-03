@@ -90,11 +90,33 @@ function procesarComando(chatId, texto, req) {
 
   const rol = getRol(chatId);
 
-  // Registrar usuario nuevo como pending
-  if (!usuarios.has(chatId)) {
+  // Registrar usuario nuevo como pending y notificar al admin
+  const esNuevo = !usuarios.has(chatId);
+  if (esNuevo) {
     const nombre = req?.body?.message?.from?.first_name || 'Usuario';
     usuarios.set(chatId, { nombre, rol: 'pending', alertas: false });
-    // El primer usuario que escribe /miid se convierte en admin
+    // Notificar al admin que alguien nuevo entro
+    if (adminId && chatId !== adminId) {
+      tgEnviar(adminId,
+        `👤 <b>Nuevo usuario en el bot:</b>\n` +
+        `Nombre: <b>${nombre}</b>\n` +
+        `Chat ID: <code>${chatId}</code>\n\n` +
+        `Para autorizarlo: /autorizar ${chatId}\n` +
+        `Para darle alertas: /alertas ${chatId}`
+      );
+    }
+  }
+
+  // Bloquear comandos a usuarios pending (excepto /start, /ayuda, /miid)
+  if (getRol(chatId) === 'pending' && !['/start','/ayuda','/miid'].includes(cmd)) {
+    const nombre = usuarios.get(chatId)?.nombre || 'Usuario';
+    tgEnviar(chatId,
+      `⛔ <b>Acceso pendiente de autorizacion.</b>\n\n` +
+      `Hola <b>${nombre}</b>, tu solicitud fue enviada al administrador del sistema.\n\n` +
+      `Tu Chat ID es: <code>${chatId}</code>\n\n` +
+      `Cuando el administrador te autorice recibiras una notificacion.`
+    );
+    return;
   }
 
   switch (cmd) {
