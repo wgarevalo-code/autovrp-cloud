@@ -16,10 +16,12 @@ const TG_API       = `https://api.telegram.org/bot${TG_TOKEN}`;
 // VIEWER: solo puede consultar datos + recibe alertas si fue autorizado
 // PENDING: escribio al bot pero aun no fue autorizado
 
-const ADMIN_ID = null; // Se asigna automaticamente al primer /miid
-let adminId    = null;
+const ADMIN_CHAT_ID = 8150132531;
+let adminId = ADMIN_CHAT_ID;
 
 const usuarios = new Map();
+// Admin precargado permanente
+usuarios.set(ADMIN_CHAT_ID, { nombre: 'Walter', rol: 'admin', alertas: true });
 // usuarios Map: chatId -> { nombre, rol: 'admin'|'viewer'|'pending', alertas: bool }
 
 function getRol(chatId) {
