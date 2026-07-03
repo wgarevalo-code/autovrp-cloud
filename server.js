@@ -11,8 +11,29 @@ const PORT         = process.env.PORT || 8080;
 const TG_TOKEN     = process.env.TG_TOKEN || '8820660886:AAHBrK9C2JZ_liCR4wkKSZUr7YEIy9Aek3s';
 const TG_API       = `https://api.telegram.org/bot${TG_TOKEN}`;
 
-// ── Chat IDs autorizados (se agregan automaticamente al primer mensaje) ──
-const chatsAutorizados = new Set();
+// ── Sistema de roles ─────────────────────────────────────────────
+// ADMIN: puede controlar + recibe alertas + puede autorizar otros
+// VIEWER: solo puede consultar datos + recibe alertas si fue autorizado
+// PENDING: escribio al bot pero aun no fue autorizado
+
+const ADMIN_ID = null; // Se asigna automaticamente al primer /miid
+let adminId    = null;
+
+const usuarios = new Map();
+// usuarios Map: chatId -> { nombre, rol: 'admin'|'viewer'|'pending', alertas: bool }
+
+function getRol(chatId) {
+  return usuarios.has(chatId) ? usuarios.get(chatId).rol : 'pending';
+}
+
+function esAdmin(chatId)  { return getRol(chatId) === 'admin';  }
+function esViewer(chatId) { return ['admin','viewer'].includes(getRol(chatId)); }
+
+function chatsConAlertas() {
+  const ids = [];
+  usuarios.forEach((u, id) => { if (u.alertas) ids.push(id); });
+  return ids;
+}
 
 // ── Datos en memoria ─────────────────────────────────────────────
 let camara1 = {
@@ -54,11 +75,11 @@ function tgEnviar(chatId, texto) {
 }
 
 function tgAlerta(texto) {
-  chatsAutorizados.forEach(id => tgEnviar(id, texto));
+  chatsConAlertas().forEach(id => tgEnviar(id, texto));
 }
 
 // ── Telegram: procesar comando ────────────────────────────────────
-function procesarComando(chatId, texto) {
+function procesarComando(chatId, texto, req) {
   chatsAutorizados.add(chatId);
   const cmd = texto.trim().toLowerCase().split(' ')[0];
 
@@ -67,9 +88,19 @@ function procesarComando(chatId, texto) {
     ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC')
     : 'Sin datos';
 
+  const rol = getRol(chatId);
+
+  // Registrar usuario nuevo como pending
+  if (!usuarios.has(chatId)) {
+    const nombre = req?.body?.message?.from?.first_name || 'Usuario';
+    usuarios.set(chatId, { nombre, rol: 'pending', alertas: false });
+    // El primer usuario que escribe /miid se convierte en admin
+  }
+
   switch (cmd) {
     case '/start':
-    case '/ayuda':
+    case '/ayuda': {
+      const esAuth = esViewer(chatId);
       tgEnviar(chatId,
         `<b>🔧 AutoVRP — Bot de la Camara 1</b>\n\n` +
         `<b>Consultas:</b>\n` +
@@ -79,14 +110,34 @@ function procesarComando(chatId, texto) {
         `/valvula — Posicion de la valvula\n` +
         `/lora — Estado del enlace LoRa\n` +
         `/estado — Resumen completo\n\n` +
+        (esAuth ?
         `<b>Control:</b>\n` +
         `/stop — Parada de emergencia\n` +
         `/auto — Modo automatico PID\n` +
         `/manual — Modo manual\n` +
-        `/setpoint 20 — Cambiar setpoint\n\n` +
+        `/setpoint 20 — Cambiar setpoint\n\n` : '') +
+        (esAdmin(chatId) ?
+        `<b>Admin:</b>\n` +
+        `/usuarios — Ver usuarios registrados\n` +
+        `/autorizar [ID] — Dar acceso a un usuario\n` +
+        `/revocar [ID] — Quitar acceso\n` +
+        `/alertas [ID] — Activar alertas para un usuario\n\n` : '') +
         `<b>Dashboard:</b>\n` +
-        `https://autovrp-cloud-production.up.railway.app`
+        `https://autovrp-cloud-production.up.railway.app\n\n` +
+        `Tu rol: <b>${rol.toUpperCase()}</b>`
       );
+      break;
+    }
+
+    case '/miid':
+      // Si no hay admin aun, el primero que escriba /miid se convierte en admin
+      if (!adminId) {
+        adminId = chatId;
+        usuarios.set(chatId, { ...usuarios.get(chatId), rol: 'admin', alertas: true });
+        tgEnviar(chatId, `✅ <b>Eres el administrador del sistema.</b>\nTu Chat ID: <code>${chatId}</code>\n\nYa puedes usar todos los comandos de control y administrar usuarios.`);
+      } else {
+        tgEnviar(chatId, `Tu Chat ID es: <code>${chatId}</code>\nRol actual: <b>${rol.toUpperCase()}</b>`);
+      }
       break;
 
     case '/presion':
@@ -161,24 +212,70 @@ function procesarComando(chatId, texto) {
       );
       break;
 
+    case '/usuarios':
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede ver los usuarios.'); break; }
+      if (usuarios.size === 0) { tgEnviar(chatId, 'No hay usuarios registrados.'); break; }
+      let lista = '<b>👥 Usuarios registrados:</b>\n\n';
+      usuarios.forEach((u, id) => {
+        lista += `• <b>${u.nombre}</b> (${u.rol.toUpperCase()})\n  ID: <code>${id}</code>  Alertas: ${u.alertas ? '✅' : '❌'}\n\n`;
+      });
+      tgEnviar(chatId, lista);
+      break;
+
+    case '/autorizar': {
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede autorizar usuarios.'); break; }
+      const idAuth = parseInt(texto.trim().split(' ')[1]);
+      if (!idAuth) { tgEnviar(chatId, 'Uso: /autorizar [ChatID]\nEjemplo: /autorizar 123456789'); break; }
+      const uAuth = usuarios.get(idAuth) || { nombre: 'Desconocido', rol: 'pending', alertas: false };
+      usuarios.set(idAuth, { ...uAuth, rol: 'viewer', alertas: true });
+      tgEnviar(chatId, `✅ Usuario <code>${idAuth}</code> autorizado como VIEWER con alertas.`);
+      tgEnviar(idAuth, `✅ <b>Acceso autorizado al bot AutoVRP.</b>\nYa puedes consultar datos y recibir alertas.\nEscribe /ayuda para ver los comandos.`);
+      break;
+    }
+
+    case '/revocar': {
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede revocar accesos.'); break; }
+      const idRev = parseInt(texto.trim().split(' ')[1]);
+      if (!idRev) { tgEnviar(chatId, 'Uso: /revocar [ChatID]'); break; }
+      if (usuarios.has(idRev)) usuarios.set(idRev, { ...usuarios.get(idRev), rol: 'pending', alertas: false });
+      tgEnviar(chatId, `✅ Acceso revocado para <code>${idRev}</code>.`);
+      tgEnviar(idRev, `⛔ Tu acceso al bot AutoVRP ha sido revocado.`);
+      break;
+    }
+
+    case '/alertas': {
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede gestionar alertas.'); break; }
+      const idAl = parseInt(texto.trim().split(' ')[1]);
+      if (!idAl) { tgEnviar(chatId, 'Uso: /alertas [ChatID]'); break; }
+      if (usuarios.has(idAl)) {
+        const u = usuarios.get(idAl);
+        usuarios.set(idAl, { ...u, alertas: !u.alertas });
+        tgEnviar(chatId, `Alertas para <code>${idAl}</code>: ${!u.alertas ? '✅ activadas' : '❌ desactivadas'}`);
+      }
+      break;
+    }
+
     case '/stop':
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       tgEnviar(chatId, '🛑 <b>PARADA DE EMERGENCIA enviada al nodo.</b>');
-      // El Gateway lo ejecutara en su proximo ciclo via endpoint /cmd
-      fetch(`http://localhost:${PORT}/cmd?c=STOP`).catch(()=>{});
+      tgAlerta(`🛑 <b>PARADA DE EMERGENCIA</b> activada por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
       break;
 
     case '/auto':
-      tgEnviar(chatId, '✅ <b>Modo automatico PID activado.</b>');
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       camara1.modoAuto = true;
+      tgEnviar(chatId, '✅ <b>Modo automatico PID activado.</b>');
       break;
 
     case '/manual':
-      tgEnviar(chatId, '🔧 <b>Modo manual activado.</b>');
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       camara1.modoAuto = false;
+      tgEnviar(chatId, '🔧 <b>Modo manual activado.</b>');
       break;
 
     default:
       if (cmd.startsWith('/setpoint')) {
+        if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para cambiar el setpoint.'); break; }
         const parts = texto.trim().split(' ');
         const sp    = parseFloat(parts[1]);
         if (isNaN(sp) || sp <= 0 || sp >= camara1.presionP1) {
@@ -186,7 +283,10 @@ function procesarComando(chatId, texto) {
         } else {
           camara1.setpoint = sp;
           tgEnviar(chatId, `✅ <b>Setpoint actualizado a ${sp} PSI</b>`);
+          tgAlerta(`ℹ️ Setpoint cambiado a <b>${sp} PSI</b> por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
         }
+      } else if (rol === 'pending') {
+        tgEnviar(chatId, `⛔ <b>Acceso pendiente de autorizacion.</b>\nEl administrador del sistema debe autorizarte.\nTu Chat ID es: <code>${chatId}</code>\n\nComparte este ID con el administrador.`);
       } else {
         tgEnviar(chatId, `Comando no reconocido. Escribe /ayuda para ver los comandos disponibles.`);
       }
@@ -200,7 +300,7 @@ app.post(`/webhook/${TG_TOKEN}`, (req, res) => {
   if (!body.message) return;
   const chatId = body.message.chat.id;
   const texto  = body.message.text || '';
-  if (texto) procesarComando(chatId, texto);
+  if (texto) procesarComando(chatId, texto, req);
 });
 
 // ── Recibir datos del Gateway ESP32 ──────────────────────────────
