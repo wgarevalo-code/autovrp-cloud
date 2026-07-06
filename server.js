@@ -43,9 +43,11 @@ let camara1 = {
   presionP2:    0.0,
   humedad:      0.0,
   temperatura:  0.0,
-  boyaMojada:   false,
-  luzEncendida: false,
-  movimiento:   false,
+  boyaMojada:       false,
+  nivelInundacion:  0,
+  distanciaCM:      0,
+  luzEncendida:     false,
+  movimiento:       false,
   pasos:        0,
   grados:       0.0,
   rssi:         0,
@@ -343,10 +345,18 @@ app.post('/actualizar', (req, res) => {
     if (camara1.historial.length > 30) camara1.historial.shift();
   }
 
-  // Alertas automaticas por Telegram
-  if (!antBoya && camara1.boyaMojada) {
-    tgAlerta('🚨 <b>ALERTA INUNDACION</b>\nEl sensor de boya detecta agua en la Camara 1.\nRevisa inmediatamente.');
+  // Alertas automaticas por Telegram segun nivel
+  const nivelAnterior = estadoAnterior.nivelInundacion || 0;
+  const nivelActual   = camara1.nivelInundacion        || 0;
+  if (nivelAnterior < 1 && nivelActual >= 1) {
+    const msgs = ['','⚠️ <b>ADVERTENCIA — Agua detectada</b>\nNivel inicial de agua en Camara 1.\nDistancia: ' + camara1.distanciaCM + ' cm',
+                     '🚨 <b>NIVEL CRITICO — Inundacion</b>\nAgua cerca del sensor en Camara 1.\nDistancia: ' + camara1.distanciaCM + ' cm\n\nAccion inmediata requerida.',
+                     '🆘 <b>PELIGRO — SISTEMA APAGADO</b>\nNivel maximo alcanzado en Camara 1.\nEl kill switch corto el motor por proteccion.'];
+    tgAlerta(msgs[Math.min(nivelActual, 3)]);
+  } else if (nivelAnterior > 0 && nivelActual === 0) {
+    tgAlerta('✅ <b>Inundacion resuelta</b>\nEl nivel de agua en Camara 1 volvio a normal.');
   }
+  estadoAnterior.nivelInundacion = nivelActual;
   if (!antMov && camara1.movimiento) {
     tgAlerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
   }

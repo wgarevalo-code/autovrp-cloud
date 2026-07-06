@@ -178,6 +178,63 @@
   .alerta-panel { display: none; border: 1px solid #6a0000; background: #1a0000; border-radius: 6px; padding: 14px 18px; }
   .alerta-panel.show { display: flex; align-items: center; gap: 14px; }
 
+  /* ── OVERLAY INUNDACION ── */
+  #overlayInundacion {
+    display: none; position: fixed; inset: 0; z-index: 9999;
+    pointer-events: none; overflow: hidden;
+  }
+  #overlayInundacion.show { display: block; }
+  .water-bg {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(0,40,120,0) 0%, rgba(0,60,180,0.18) 60%, rgba(0,80,220,0.35) 100%);
+    animation: waterPulse 3s ease-in-out infinite;
+  }
+  .water-bg.critico {
+    background: linear-gradient(180deg, rgba(0,20,80,0) 0%, rgba(0,40,140,0.3) 50%, rgba(0,60,200,0.55) 100%);
+  }
+  .water-bg.peligro {
+    background: linear-gradient(180deg, rgba(80,0,0,0.1) 0%, rgba(160,0,0,0.25) 40%, rgba(0,40,160,0.6) 100%);
+    animation: waterPulse 1.2s ease-in-out infinite;
+  }
+  @keyframes waterPulse { 0%,100%{opacity:0.7} 50%{opacity:1} }
+
+  .wave-container { position: absolute; bottom: 0; left: 0; right: 0; }
+  .wave { position: absolute; bottom: 0; left: -100%; width: 300%; opacity: 0.4; }
+  .wave svg { display: block; width: 100%; }
+  .wave1 { animation: waveMove 4s linear infinite; }
+  .wave2 { animation: waveMove 6s linear infinite reverse; opacity: 0.25; bottom: 10px; }
+  .wave3 { animation: waveMove 5s linear infinite 2s; opacity: 0.2; bottom: 5px; }
+  @keyframes waveMove { 0%{transform:translateX(0)} 100%{transform:translateX(33.33%)} }
+
+  .overlay-banner {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    padding: 12px 24px;
+    pointer-events: none;
+  }
+  .overlay-banner.advertencia { background: rgba(30,20,0,0.92); border-bottom: 2px solid #ffc030; }
+  .overlay-banner.critico     { background: rgba(20,0,20,0.92); border-bottom: 2px solid #ff4444; animation: bannerFlash 1s infinite; }
+  .overlay-banner.peligro     { background: rgba(60,0,0,0.95); border-bottom: 3px solid #ff0000; animation: bannerFlash 0.5s infinite; }
+  @keyframes bannerFlash { 0%,100%{opacity:1} 50%{opacity:0.75} }
+
+  .overlay-icon { font-size: 32px; }
+  .overlay-titulo { font-size: 20px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+  .overlay-sub    { font-size: 12px; letter-spacing: 1px; margin-top: 2px; opacity: 0.8; }
+  .overlay-dist   { font-family: Consolas, monospace; font-size: 28px; font-weight: 700; padding: 0 20px; border-left: 1px solid rgba(255,255,255,0.2); }
+
+  /* Flash de borde en todo el body */
+  body.inundacion-warn   { animation: borderFlashYellow 2s infinite; }
+  body.inundacion-alert  { animation: borderFlashRed 1s infinite; }
+  body.inundacion-danger { animation: borderFlashRed 0.5s infinite; }
+  @keyframes borderFlashYellow {
+    0%,100% { box-shadow: inset 0 0 0 3px transparent; }
+    50%      { box-shadow: inset 0 0 0 3px #ffc030; }
+  }
+  @keyframes borderFlashRed {
+    0%,100% { box-shadow: inset 0 0 0 4px transparent; }
+    50%      { box-shadow: inset 0 0 0 4px #ff2222; }
+  }
+
   /* ── MISC ── */
   .water-drops { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 6px 0; }
   .drop { animation: drop-f 1.6s infinite; }
@@ -186,6 +243,24 @@
 </style>
 </head>
 <body>
+
+<!-- OVERLAY INUNDACION -->
+<div id="overlayInundacion">
+  <div class="water-bg" id="waterBg"></div>
+  <div class="wave-container">
+    <div class="wave wave1"><svg viewBox="0 0 1200 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path d="M0,40 C150,80 350,0 600,40 C850,80 1050,0 1200,40 L1200,80 L0,80 Z" fill="rgba(0,80,200,0.35)"/></svg></div>
+    <div class="wave wave2"><svg viewBox="0 0 1200 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path d="M0,50 C200,10 400,70 600,50 C800,30 1000,70 1200,50 L1200,80 L0,80 Z" fill="rgba(0,60,180,0.3)"/></svg></div>
+    <div class="wave wave3"><svg viewBox="0 0 1200 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg"><path d="M0,30 C300,70 500,10 800,50 C1000,80 1100,20 1200,30 L1200,80 L0,80 Z" fill="rgba(0,100,220,0.2)"/></svg></div>
+  </div>
+  <div class="overlay-banner" id="overlayBanner">
+    <div class="overlay-icon" id="overlayIcon">💧</div>
+    <div>
+      <div class="overlay-titulo" id="overlayTitulo">ALERTA INUNDACION</div>
+      <div class="overlay-sub" id="overlaySub">Sensor de nivel activo</div>
+    </div>
+    <div class="overlay-dist" id="overlayDist">-- cm</div>
+  </div>
+</div>
 
 <!-- TOPBAR -->
 <div class="topbar">
@@ -653,12 +728,17 @@ function actualizar() {
     document.getElementById('tempEst').textContent = d.temperatura>35?'ALTA':d.temperatura>0?'Normal':'--';
     document.getElementById('tempEst').style.color = d.temperatura>35?'#ffc030':'#a060ff';
 
-    // Boya
-    document.getElementById('boyaVal').textContent = d.boyaMojada?'MOJADA':'Seca';
-    document.getElementById('boyaEst').textContent = d.boyaMojada?'!! INUNDACION !!':'Sin inundacion';
-    document.getElementById('boyaVal').style.color = d.boyaMojada?'#ff4444':'#00e5a0';
-    document.getElementById('boyaEst').style.color = d.boyaMojada?'#ff4444':'#00e5a0';
-    document.getElementById('iconBoya').style.background = d.boyaMojada?'#200000':'#001428';
+    // Boya / inundacion
+    const nivel = d.nivelInundacion || 0;
+    const dist  = d.distanciaCM    || 0;
+    const nivelTextos = ['CAMARA SECA','ADVERTENCIA','NIVEL CRITICO','!! PELIGRO !!'];
+    const nivelColores= ['#00e5a0','#ffc030','#ff4444','#ff0000'];
+    document.getElementById('boyaVal').textContent = nivel===0?'Seca': nivelTextos[nivel];
+    document.getElementById('boyaEst').textContent = nivel===0?'Sin inundacion': `Dist: ${dist} cm`;
+    document.getElementById('boyaVal').style.color  = nivelColores[nivel]||'#ff0000';
+    document.getElementById('boyaEst').style.color  = nivelColores[nivel]||'#ff0000';
+    document.getElementById('iconBoya').style.background = nivel===0?'#001428':'#200000';
+    actualizarOverlayInundacion(nivel, dist);
 
     // Luz / movimiento
     const luzOn = d.luzEncendida;
@@ -713,6 +793,68 @@ function actualizar() {
     document.getElementById('statusPill').className='pill pill-red';
     document.getElementById('statusTxt').textContent='Sin conexion';
   });
+}
+
+// ── OVERLAY INUNDACION ──────────────────────────────────────────
+let prevNivel = 0;
+function actualizarOverlayInundacion(nivel, dist) {
+  const overlay  = document.getElementById('overlayInundacion');
+  const banner   = document.getElementById('overlayBanner');
+  const waterBg  = document.getElementById('waterBg');
+  const icon     = document.getElementById('overlayIcon');
+  const titulo   = document.getElementById('overlayTitulo');
+  const sub      = document.getElementById('overlaySub');
+  const distEl   = document.getElementById('overlayDist');
+
+  if (nivel === 0) {
+    overlay.classList.remove('show');
+    document.body.className = '';
+    return;
+  }
+
+  overlay.classList.add('show');
+  distEl.textContent = dist > 0 ? dist + ' cm' : '-- cm';
+
+  waterBg.className = 'water-bg';
+  banner.className  = 'overlay-banner';
+
+  if (nivel === 1) {
+    icon.textContent       = '⚠️';
+    titulo.textContent     = 'ADVERTENCIA — NIVEL DE AGUA';
+    titulo.style.color     = '#ffc030';
+    sub.textContent        = 'Nivel de agua detectado — monitorear';
+    sub.style.color        = '#ffc030';
+    distEl.style.color     = '#ffc030';
+    banner.classList.add('advertencia');
+    document.body.className = 'inundacion-warn';
+  } else if (nivel === 2) {
+    icon.textContent       = '🚨';
+    titulo.textContent     = 'NIVEL CRITICO — INUNDACION';
+    titulo.style.color     = '#ff4444';
+    sub.textContent        = 'Agua cerca del sensor — accion inmediata';
+    sub.style.color        = '#ff9090';
+    distEl.style.color     = '#ff4444';
+    banner.classList.add('critico');
+    waterBg.classList.add('critico');
+    document.body.className = 'inundacion-alert';
+  } else if (nivel >= 3) {
+    icon.textContent       = '🆘';
+    titulo.textContent     = '!! PELIGRO — SISTEMA APAGADO !!';
+    titulo.style.color     = '#ff0000';
+    sub.textContent        = 'Nivel maximo alcanzado — equipo desconectado por proteccion';
+    sub.style.color        = '#ff8080';
+    distEl.style.color     = '#ff0000';
+    banner.classList.add('peligro');
+    waterBg.classList.add('peligro');
+    document.body.className = 'inundacion-danger';
+  }
+
+  if (prevNivel === 0 && nivel > 0) {
+    const tipos = ['','WARN','ERR','ERR'];
+    const msgs  = ['','Nivel ADVERTENCIA','Nivel CRITICO de inundacion','PELIGRO — sistema apagado por inundacion'];
+    agregarLog(msgs[nivel] + ' — Dist: ' + dist + ' cm', tipos[nivel] || 'ERR');
+  }
+  prevNivel = nivel;
 }
 
 // Log de arranque

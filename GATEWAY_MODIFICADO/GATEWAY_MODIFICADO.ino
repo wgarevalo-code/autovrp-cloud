@@ -43,6 +43,8 @@ float temperatura   = 0.0;   // <-- NUEVO (para cuando conectes el sensor)
 bool  boyaMojada    = false;
 bool  luzEncendida  = false;
 bool  movimientoDet = false;
+int   nivelInundacion = 0;   // 0=seco 1=advertencia 2=critico 3=peligro
+long  distanciaCM     = 0;   // distancia HC-SR04 en cm
 
 // ── PID ──────────────────────────────────────────────────────────
 float setpointPSI     = 20.0;
@@ -100,9 +102,12 @@ void enviarANube() {
   json += "\"snr\":"          + String(snrVal, 1)                     + ",";
   json += "\"calidad\":\""    + getCalidad(rssiVal)                   + "\",";
   json += "\"barras\":"       + String(getBarras(rssiVal))            + ",";
-  json += "\"modoAuto\":"     + String(modoAuto  ? "true":"false")    + ",";
-  json += "\"setpoint\":"     + String(setpointPSI, 1)               + ",";
-  json += "\"estado\":\""     + estadoActual                         + "\"";
+  json += "\"modoAuto\":"         + String(modoAuto  ? "true":"false")  + ",";
+  json += "\"setpoint\":"         + String(setpointPSI, 1)             + ",";
+  json += "\"nivelInundacion\":"  + String(nivelInundacion)            + ",";
+  json += "\"distanciaCM\":"      + String(distanciaCM)                + ",";
+  json += "\"boyaMojada\":"       + String(nivelInundacion>0?"true":"false") + ",";
+  json += "\"estado\":\""         + estadoActual                       + "\"";
   json += "}";
 
   HTTPClient http;
@@ -286,6 +291,19 @@ void parsearRespuesta(String rxStr) {
     if (idxE < 0) idxE = rxStr.length();
     presionPSI_P2 = rxStr.substring(idxPsi+4, idxE).toFloat();
     agregarHistorial(presionPSI_P2);
+  }
+  int idxBoya = rxStr.indexOf("BOYA:");
+  if (idxBoya >= 0) {
+    int idxE = rxStr.indexOf(' ', idxBoya);
+    if (idxE < 0) idxE = rxStr.length();
+    nivelInundacion = rxStr.substring(idxBoya+5, idxE).toInt();
+    boyaMojada = (nivelInundacion > 0);
+  }
+  int idxDist = rxStr.indexOf("DIST:");
+  if (idxDist >= 0) {
+    int idxE = rxStr.indexOf(' ', idxDist);
+    if (idxE < 0) idxE = rxStr.length();
+    distanciaCM = rxStr.substring(idxDist+5, idxE).toInt();
   }
 }
 
