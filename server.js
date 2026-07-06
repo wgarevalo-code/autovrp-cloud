@@ -62,24 +62,91 @@ let camara1 = {
 };
 
 // Estado anterior para detectar alertas
-let estadoAnterior = { boyaMojada: false, movimiento: false };
+let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0 };
+
+// ── Sistema de alarma de inundacion ──────────────────────────────
+let alarmaActiva      = false;   // nivel > 0 actualmente
+let alarmaAcusada     = false;   // alguien presiono "Acuse recibo"
+let alarmaInterval    = null;    // timer de repeticion cada 2 min
+let alarmaRepeticion  = 0;       // contador de repeticiones
+
+function nivelEmoji(nivel) {
+  return ['','⚠️','🚨','🆘'][nivel] || '🆘';
+}
+function nivelNombre(nivel) {
+  return ['','ADVERTENCIA','NIVEL CRITICO','!! PELIGRO !!'][nivel] || 'PELIGRO';
+}
 
 // ── Telegram: enviar mensaje ──────────────────────────────────────
-function tgEnviar(chatId, texto) {
-  const body = JSON.stringify({ chat_id: chatId, text: texto, parse_mode: 'HTML' });
-  const url  = new URL(`${TG_API}/sendMessage`);
+function tgEnviar(chatId, texto, markup) {
+  const payload = { chat_id: chatId, text: texto, parse_mode: 'HTML' };
+  if (markup) payload.reply_markup = markup;
+  const body = JSON.stringify(payload);
   const req  = https.request({
     hostname: 'api.telegram.org',
     path: `/bot${TG_TOKEN}/sendMessage`,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
   });
+  req.on('error', () => {});
+  req.write(body);
+  req.end();
+}
+
+function tgAnswerCallback(callbackId, texto) {
+  const body = JSON.stringify({ callback_query_id: callbackId, text: texto, show_alert: false });
+  const req  = https.request({
+    hostname: 'api.telegram.org',
+    path: `/bot${TG_TOKEN}/answerCallbackQuery`,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+  });
+  req.on('error', () => {});
   req.write(body);
   req.end();
 }
 
 function tgAlerta(texto) {
   chatsConAlertas().forEach(id => tgEnviar(id, texto));
+}
+
+// Envia alerta de inundacion con boton de acuse
+function enviarAlertaInundacion(nivel, dist, esRepeticion) {
+  const emoji   = nivelEmoji(nivel);
+  const nombre  = nivelNombre(nivel);
+  const hora    = new Date().toLocaleTimeString('es-EC');
+  const rep     = esRepeticion ? `\n⏰ <i>Repeticion #${alarmaRepeticion} — sin acuse de recibo</i>` : '';
+
+  const texto =
+    `${emoji} <b>${nombre} — INUNDACION</b>\n` +
+    `📍 Camara 1\n` +
+    `📏 Distancia sensor: <b>${dist} cm</b>\n` +
+    `🕐 ${hora}${rep}\n\n` +
+    `Presiona el boton para confirmar que recibiste la alerta.`;
+
+  const markup = {
+    inline_keyboard: [[
+      { text: '✅ Acuse recibo', callback_data: 'acuse_inundacion' },
+      { text: '📊 Ver estado',   callback_data: 'ver_estado'       }
+    ]]
+  };
+
+  chatsConAlertas().forEach(id => tgEnviar(id, texto, markup));
+}
+
+function iniciarRepeticionAlarma(nivel, dist) {
+  detenerRepeticionAlarma();
+  alarmaRepeticion = 0;
+  alarmaAcusada    = false;
+  alarmaInterval   = setInterval(() => {
+    if (alarmaAcusada || !alarmaActiva) { detenerRepeticionAlarma(); return; }
+    alarmaRepeticion++;
+    enviarAlertaInundacion(nivel, dist, true);
+  }, 2 * 60 * 1000); // cada 2 minutos
+}
+
+function detenerRepeticionAlarma() {
+  if (alarmaInterval) { clearInterval(alarmaInterval); alarmaInterval = null; }
 }
 
 // ── Telegram: procesar comando ────────────────────────────────────
@@ -324,6 +391,40 @@ function procesarComando(chatId, texto, req) {
 app.post(`/webhook/${TG_TOKEN}`, (req, res) => {
   const body = req.body;
   res.sendStatus(200);
+
+  // Callback de botones inline
+  if (body.callback_query) {
+    const cb     = body.callback_query;
+    const chatId = cb.message.chat.id;
+    const data   = cb.data;
+
+    if (!esViewer(chatId)) {
+      tgAnswerCallback(cb.id, '⛔ Sin acceso');
+      return;
+    }
+
+    if (data === 'acuse_inundacion') {
+      alarmaAcusada = true;
+      detenerRepeticionAlarma();
+      const nombre = usuarios.get(chatId)?.nombre || 'Usuario';
+      tgAnswerCallback(cb.id, '✅ Acuse registrado');
+      tgAlerta(`✅ <b>Alerta acusada</b> por <b>${nombre}</b>\nSe detienen las repeticiones automaticas.`);
+    } else if (data === 'ver_estado') {
+      const d    = camara1;
+      const sync = d.ultimaActualizacion ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC') : '--';
+      tgAnswerCallback(cb.id, 'Cargando estado...');
+      tgEnviar(chatId,
+        `<b>📊 Estado — Camara 1</b>\n\n` +
+        `Boya: ${d.nivelInundacion > 0 ? nivelEmoji(d.nivelInundacion)+' '+nivelNombre(d.nivelInundacion) : '✅ Seca'}\n` +
+        `Distancia: <b>${d.distanciaCM} cm</b>\n` +
+        `LoRa: ${d.rssi !== 0 ? '✅ '+d.calidad+' ('+d.rssi+' dBm)' : '❌ Sin nodo'}\n` +
+        `P1: <b>${d.presionP1.toFixed(1)} PSI</b> | P2: <b>${d.presionP2.toFixed(1)} PSI</b>\n` +
+        `🕐 ${sync}`
+      );
+    }
+    return;
+  }
+
   if (!body.message) return;
   const chatId = body.message.chat.id;
   const texto  = body.message.text || '';
@@ -348,13 +449,28 @@ app.post('/actualizar', (req, res) => {
   // Alertas automaticas por Telegram segun nivel
   const nivelAnterior = estadoAnterior.nivelInundacion || 0;
   const nivelActual   = camara1.nivelInundacion        || 0;
-  if (nivelAnterior < 1 && nivelActual >= 1) {
-    const msgs = ['','⚠️ <b>ADVERTENCIA — Agua detectada</b>\nNivel inicial de agua en Camara 1.\nDistancia: ' + camara1.distanciaCM + ' cm',
-                     '🚨 <b>NIVEL CRITICO — Inundacion</b>\nAgua cerca del sensor en Camara 1.\nDistancia: ' + camara1.distanciaCM + ' cm\n\nAccion inmediata requerida.',
-                     '🆘 <b>PELIGRO — SISTEMA APAGADO</b>\nNivel maximo alcanzado en Camara 1.\nEl kill switch corto el motor por proteccion.'];
-    tgAlerta(msgs[Math.min(nivelActual, 3)]);
+
+  if (nivelAnterior === 0 && nivelActual > 0) {
+    // Inicio de alarma
+    alarmaActiva   = true;
+    alarmaAcusada  = false;
+    enviarAlertaInundacion(nivelActual, camara1.distanciaCM, false);
+    iniciarRepeticionAlarma(nivelActual, camara1.distanciaCM);
+  } else if (nivelAnterior > 0 && nivelActual > nivelAnterior) {
+    // Escalo a nivel mas grave — nueva alerta inmediata
+    alarmaAcusada = false;
+    enviarAlertaInundacion(nivelActual, camara1.distanciaCM, false);
+    iniciarRepeticionAlarma(nivelActual, camara1.distanciaCM);
   } else if (nivelAnterior > 0 && nivelActual === 0) {
-    tgAlerta('✅ <b>Inundacion resuelta</b>\nEl nivel de agua en Camara 1 volvio a normal.');
+    // Nivel volvio a normal
+    alarmaActiva  = false;
+    alarmaAcusada = false;
+    detenerRepeticionAlarma();
+    tgAlerta(
+      `✅ <b>Inundacion resuelta — Camara 1</b>\n` +
+      `El nivel de agua volvio a normal.\n` +
+      `🕐 ${new Date().toLocaleTimeString('es-EC')}`
+    );
   }
   estadoAnterior.nivelInundacion = nivelActual;
   if (!antMov && camara1.movimiento) {
