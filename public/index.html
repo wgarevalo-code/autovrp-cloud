@@ -788,6 +788,13 @@ function actualizar() {
     }
     prevP2 = d.presionP2;
 
+    // Heartbeat cada 30 ciclos (~30s)
+    if (ciclo % 30 === 0) {
+      const loraStr = d.rssi !== 0 ? 'LoRa OK ('+d.rssi+' dBm '+d.calidad+')' : 'Sin enlace LoRa';
+      const boyaStr = d.nivelInundacion > 0 ? ' | BOYA Niv.'+d.nivelInundacion : '';
+      agregarLog('Heartbeat — P1:'+d.presionP1.toFixed(1)+' P2:'+d.presionP2.toFixed(1)+' PSI | '+loraStr+boyaStr, 'SYS');
+    }
+
   }).catch(()=>{
     agregarLog('Sin respuesta del servidor','ERR');
     document.getElementById('statusPill').className='pill pill-red';
