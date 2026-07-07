@@ -4,8 +4,65 @@
 // ================================================================
 const express = require('express');
 const https   = require('https');
+const fs      = require('fs');
+const path    = require('path');
 const app     = express();
 app.use(express.json());
+
+// ── Persistencia en disco ─────────────────────────────────────────
+const USERS_FILE  = path.join(__dirname, 'data', 'usuarios.json');
+const EVENTS_FILE = path.join(__dirname, 'data', 'eventos.json');
+
+function asegurarDirectorio() {
+  const dir = path.join(__dirname, 'data');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function guardarUsuarios() {
+  try {
+    asegurarDirectorio();
+    const obj = {};
+    usuarios.forEach((u, id) => { obj[id] = u; });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(obj, null, 2));
+  } catch(e) { console.error('Error guardando usuarios:', e.message); }
+}
+
+function cargarUsuarios() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) return;
+    const obj = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    Object.entries(obj).forEach(([id, u]) => {
+      usuarios.set(parseInt(id), u);
+    });
+    console.log(`Usuarios cargados: ${usuarios.size}`);
+  } catch(e) { console.error('Error cargando usuarios:', e.message); }
+}
+
+const MAX_EVENTOS = 500;
+let eventosServidor = [];
+
+function registrarEvento(usuario, accion, detalle) {
+  const ev = {
+    ts:      new Date().toISOString(),
+    usuario: usuario || 'sistema',
+    accion,
+    detalle: detalle || ''
+  };
+  eventosServidor.unshift(ev);
+  if (eventosServidor.length > MAX_EVENTOS) eventosServidor.pop();
+  try {
+    asegurarDirectorio();
+    fs.writeFileSync(EVENTS_FILE, JSON.stringify(eventosServidor.slice(0, 200), null, 2));
+  } catch(e) {}
+}
+
+function cargarEventos() {
+  try {
+    if (!fs.existsSync(EVENTS_FILE)) return;
+    eventosServidor = JSON.parse(fs.readFileSync(EVENTS_FILE, 'utf8'));
+    console.log(`Eventos cargados: ${eventosServidor.length}`);
+  } catch(e) {}
+}
 
 const PORT         = process.env.PORT || 8080;
 const TG_TOKEN     = process.env.TG_TOKEN || '8820660886:AAHBrK9C2JZ_liCR4wkKSZUr7YEIy9Aek3s';
@@ -20,7 +77,7 @@ const ADMIN_CHAT_ID = 8150132531;
 let adminId = ADMIN_CHAT_ID;
 
 const usuarios = new Map();
-// Admin precargado permanente
+// Admin precargado permanente (siempre, aunque el archivo no tenga su entrada)
 usuarios.set(ADMIN_CHAT_ID, { nombre: 'Walter', rol: 'admin', alertas: true });
 // usuarios Map: chatId -> { nombre, rol: 'admin'|'viewer'|'pending', alertas: bool }
 
@@ -322,6 +379,8 @@ function procesarComando(chatId, texto, req) {
       if (!idAuth) { tgEnviar(chatId, 'Uso: /autorizar [ChatID]\nEjemplo: /autorizar 123456789'); break; }
       const uAuth = usuarios.get(idAuth) || { nombre: 'Desconocido', rol: 'pending', alertas: false };
       usuarios.set(idAuth, { ...uAuth, rol: 'viewer', alertas: true });
+      guardarUsuarios();
+      registrarEvento(usuarios.get(chatId)?.nombre, 'AUTORIZAR', `ID ${idAuth} (${uAuth.nombre})`);
       tgEnviar(chatId, `✅ Usuario <code>${idAuth}</code> autorizado como VIEWER con alertas.`);
       tgEnviar(idAuth, `✅ <b>Acceso autorizado al bot AutoVRP.</b>\nYa puedes consultar datos y recibir alertas.\nEscribe /ayuda para ver los comandos.`);
       break;
@@ -332,6 +391,8 @@ function procesarComando(chatId, texto, req) {
       const idRev = parseInt(texto.trim().split(' ')[1]);
       if (!idRev) { tgEnviar(chatId, 'Uso: /revocar [ChatID]'); break; }
       if (usuarios.has(idRev)) usuarios.set(idRev, { ...usuarios.get(idRev), rol: 'pending', alertas: false });
+      guardarUsuarios();
+      registrarEvento(usuarios.get(chatId)?.nombre, 'REVOCAR', `ID ${idRev}`);
       tgEnviar(chatId, `✅ Acceso revocado para <code>${idRev}</code>.`);
       tgEnviar(idRev, `⛔ Tu acceso al bot AutoVRP ha sido revocado.`);
       break;
@@ -344,6 +405,8 @@ function procesarComando(chatId, texto, req) {
       if (usuarios.has(idAl)) {
         const u = usuarios.get(idAl);
         usuarios.set(idAl, { ...u, alertas: !u.alertas });
+        guardarUsuarios();
+        registrarEvento(usuarios.get(chatId)?.nombre, 'ALERTAS_TOGGLE', `ID ${idAl} → ${!u.alertas}`);
         tgEnviar(chatId, `Alertas para <code>${idAl}</code>: ${!u.alertas ? '✅ activadas' : '❌ desactivadas'}`);
       }
       break;
@@ -351,6 +414,7 @@ function procesarComando(chatId, texto, req) {
 
     case '/stop':
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
+      registrarEvento(usuarios.get(chatId)?.nombre, 'PARADA_EMERGENCIA', 'via Telegram');
       tgEnviar(chatId, '🛑 <b>PARADA DE EMERGENCIA enviada al nodo.</b>');
       tgAlerta(`🛑 <b>PARADA DE EMERGENCIA</b> activada por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
       break;
@@ -358,12 +422,14 @@ function procesarComando(chatId, texto, req) {
     case '/auto':
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       camara1.modoAuto = true;
+      registrarEvento(usuarios.get(chatId)?.nombre, 'MODO_AUTO', 'via Telegram');
       tgEnviar(chatId, '✅ <b>Modo automatico PID activado.</b>');
       break;
 
     case '/manual':
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       camara1.modoAuto = false;
+      registrarEvento(usuarios.get(chatId)?.nombre, 'MODO_MANUAL', 'via Telegram');
       tgEnviar(chatId, '🔧 <b>Modo manual activado.</b>');
       break;
 
@@ -451,30 +517,27 @@ app.post('/actualizar', (req, res) => {
   const nivelActual   = camara1.nivelInundacion        || 0;
 
   if (nivelAnterior === 0 && nivelActual > 0) {
-    // Inicio de alarma
     alarmaActiva   = true;
     alarmaAcusada  = false;
     enviarAlertaInundacion(nivelActual, camara1.distanciaCM, false);
     iniciarRepeticionAlarma(nivelActual, camara1.distanciaCM);
+    registrarEvento('gateway', 'ALERTA_INUNDACION', `Nivel ${nivelActual} — Dist: ${camara1.distanciaCM}cm`);
   } else if (nivelAnterior > 0 && nivelActual > nivelAnterior) {
-    // Escalo a nivel mas grave — nueva alerta inmediata
     alarmaAcusada = false;
     enviarAlertaInundacion(nivelActual, camara1.distanciaCM, false);
     iniciarRepeticionAlarma(nivelActual, camara1.distanciaCM);
+    registrarEvento('gateway', 'ESCALA_INUNDACION', `Nivel ${nivelAnterior}→${nivelActual} — Dist: ${camara1.distanciaCM}cm`);
   } else if (nivelAnterior > 0 && nivelActual === 0) {
-    // Nivel volvio a normal
     alarmaActiva  = false;
     alarmaAcusada = false;
     detenerRepeticionAlarma();
-    tgAlerta(
-      `✅ <b>Inundacion resuelta — Camara 1</b>\n` +
-      `El nivel de agua volvio a normal.\n` +
-      `🕐 ${new Date().toLocaleTimeString('es-EC')}`
-    );
+    tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nEl nivel de agua volvio a normal.\n🕐 ${new Date().toLocaleTimeString('es-EC')}`);
+    registrarEvento('gateway', 'INUNDACION_RESUELTA', 'Nivel volvio a 0');
   }
   estadoAnterior.nivelInundacion = nivelActual;
   if (!antMov && camara1.movimiento) {
     tgAlerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
+    registrarEvento('gateway', 'ALERTA_MOVIMIENTO', 'Movimiento detectado');
   }
 
   res.json({ ok: true });
@@ -482,7 +545,23 @@ app.post('/actualizar', (req, res) => {
 
 // ── API para el dashboard ─────────────────────────────────────────
 app.get('/datos', (req, res) => {
-  res.json({ ...camara1, historial: camara1.historial });
+  // Si no llegan datos hace más de 15s, mostrar como desconectado
+  const sinDatos = !camara1.ultimaActualizacion ||
+    (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 15000;
+  const respuesta = { ...camara1, historial: camara1.historial };
+  if (sinDatos) {
+    respuesta.rssi    = 0;
+    respuesta.barras  = 0;
+    respuesta.calidad = 'Sin senal';
+    respuesta.estado  = 'SIN DATOS';
+    respuesta.sinDatos = true;
+  }
+  res.json(respuesta);
+});
+
+// ── Log de eventos del servidor ───────────────────────────────────
+app.get('/eventos', (req, res) => {
+  res.json(eventosServidor.slice(0, 200));
 });
 
 // ── Endpoints IFTTT / Google Assistant ───────────────────────────
@@ -533,5 +612,8 @@ function registrarWebhook() {
 
 app.listen(PORT, () => {
   console.log(`AutoVRP servidor corriendo en puerto ${PORT}`);
+  cargarUsuarios();
+  cargarEventos();
+  registrarEvento('sistema', 'SERVIDOR_INICIO', `Puerto ${PORT}`);
   registrarWebhook();
 });
