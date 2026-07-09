@@ -271,7 +271,8 @@ function procesarComando(chatId, texto, req) {
         `/usuarios — Ver usuarios registrados\n` +
         `/autorizar [ID] — Dar acceso a un usuario\n` +
         `/revocar [ID] — Quitar acceso\n` +
-        `/alertas [ID] — Activar alertas para un usuario\n\n` : '') +
+        `/alertas [ID] — Activar alertas para un usuario\n` +
+        `/test — Enviar notificacion de prueba a todos\n\n` : '') +
         `<b>Dashboard:</b>\n` +
         `https://autovrp-cloud-production.up.railway.app\n\n` +
         `Tu rol: <b>${rol.toUpperCase()}</b>`
@@ -409,6 +410,23 @@ function procesarComando(chatId, texto, req) {
         registrarEvento(usuarios.get(chatId)?.nombre, 'ALERTAS_TOGGLE', `ID ${idAl} → ${!u.alertas}`);
         tgEnviar(chatId, `Alertas para <code>${idAl}</code>: ${!u.alertas ? '✅ activadas' : '❌ desactivadas'}`);
       }
+      break;
+    }
+
+    case '/test': {
+      if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede enviar pruebas.'); break; }
+      const destinos = chatsConAlertas();
+      const hora = new Date().toLocaleTimeString('es-EC');
+      destinos.forEach(id => tgEnviar(id,
+        `🔔 <b>PRUEBA DE NOTIFICACION — AutoVRP</b>\n\n` +
+        `✅ El sistema de alertas funciona correctamente.\n` +
+        `📍 Camara 1 — Cuenca, Ecuador\n` +
+        `🕐 ${hora}\n\n` +
+        `<i>Este mensaje llego a ${destinos.length} usuario(s) registrado(s).</i>`
+      ));
+      registrarEvento(usuarios.get(chatId)?.nombre, 'TEST_NOTIFICACION', `Enviado a ${destinos.length} usuarios`);
+      tgEnviar(chatId, `✅ Prueba enviada a <b>${destinos.length}</b> usuario(s):\n` +
+        destinos.map(id => `• ${usuarios.get(id)?.nombre || id}`).join('\n'));
       break;
     }
 
