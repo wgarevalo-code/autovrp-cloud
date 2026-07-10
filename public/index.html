@@ -235,6 +235,33 @@
     50%      { box-shadow: inset 0 0 0 4px #ff2222; }
   }
 
+  /* ── MOTOR PANEL ── */
+  .motor-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  @media(max-width:900px){ .motor-grid { grid-template-columns: 1fr; } }
+  .motor-section { border: 1px solid var(--border); border-radius: 5px; padding: 14px; }
+  .motor-section-title { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+  .btn-motor {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 4px; border: 1px solid; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit; padding: 10px 0; transition: all 0.15s; width: 100%;
+  }
+  .btn-motor-d   { background: #001830; border-color: #004080; color: var(--blue); }
+  .btn-motor-i   { background: #001830; border-color: #004080; color: var(--blue); }
+  .btn-motor-go  { background: #002010; border-color: #005030; color: var(--green); }
+  .btn-motor-test{ background: #150020; border-color: #400060; color: var(--purple); }
+  .btn-motor:hover { filter: brightness(1.3); }
+  .btn-motor:active { transform: scale(0.96); }
+  .motor-move-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .motor-input { background: var(--bg); border: 1px solid var(--border2); color: var(--green); padding: 7px 8px; border-radius: 4px; font-family: Consolas, monospace; font-size: 14px; text-align: center; width: 100%; }
+  .motor-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .motor-stat { display: flex; justify-content: space-between; align-items: center; padding: 5px 0; border-bottom: 1px solid #0e1620; font-size: 12px; }
+  .motor-stat:last-child { border-bottom: none; }
+  .motor-stat .mval { color: var(--text); font-weight: 700; font-family: Consolas, monospace; }
+  .vel-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .vel-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text3); margin-top: 3px; }
+  .corriente-bar-wrap { width: 100%; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; margin-top: 5px; }
+  .corriente-bar { height: 100%; border-radius: 4px; transition: width 0.4s, background 0.3s; }
+
   /* ── MISC ── */
   .water-drops { display: flex; align-items: center; justify-content: center; gap: 5px; margin: 6px 0; }
   .drop { animation: drop-f 1.6s infinite; }
@@ -466,7 +493,140 @@
 
   </div>
 
-  <!-- FILA 4: GRAFICA HISTORICA + TABLA -->
+  <!-- FILA 4: CONTROL MOTOR NEMA17 (Valvula piloto — 17 vueltas) -->
+  <div class="panel">
+    <div class="panel-head">
+      <div class="panel-head-left">
+        <span class="panel-tag">Motor NEMA17 — Valvula piloto (17 vueltas = rango total)</span>
+        <span class="panel-badge badge-blue" id="motorEstBadge">EN ESPERA</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="font-size:11px;color:var(--text2)">
+          Apertura: <span style="color:var(--green);font-family:Consolas;font-weight:700;font-size:15px" id="motorPct">--%</span>
+          &nbsp;|&nbsp;
+          <span style="color:var(--text);font-family:Consolas" id="motorVueltas">-- vueltas</span>
+          &nbsp;|&nbsp;
+          Pasos: <span style="color:var(--text2);font-family:Consolas" id="motorPos">--</span>
+        </div>
+        <button class="btn-stop" onclick="pararMotor()" style="padding:5px 12px;font-size:11px">
+          <svg viewBox="0 0 24 24" width="12" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          STOP
+        </button>
+      </div>
+    </div>
+
+    <!-- BARRA DE APERTURA -->
+    <div style="padding:12px 16px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-bottom:4px">
+        <span>CERRADO (tope)</span>
+        <span id="aperturaLbl" style="color:var(--green);font-weight:700">-- %</span>
+        <span>ABIERTO (17 vueltas)</span>
+      </div>
+      <div style="height:10px;background:var(--border);border-radius:5px;overflow:hidden;margin-bottom:10px">
+        <div id="aperturaBarra" style="height:100%;width:0%;background:var(--green);border-radius:5px;transition:width 0.6s ease"></div>
+      </div>
+      <!-- Marcas de vueltas -->
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-bottom:10px;padding:0 2px">
+        <span>0</span><span>2</span><span>4</span><span>6</span><span>8</span>
+        <span>10</span><span>12</span><span>14</span><span>17</span>
+      </div>
+    </div>
+
+    <div class="panel-body">
+
+      <!-- PRESETS RAPIDOS -->
+      <div style="margin-bottom:14px">
+        <div class="motor-section-title">Posicion directa — presets</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
+          <button class="btn-motor" onclick="irAPosicion(0)"    style="background:#1a0000;border-color:#500000;color:#ff4444;font-size:11px">CERRAR<br><span style="font-size:9px;font-weight:400">0 v.</span></button>
+          <button class="btn-motor btn-motor-test" onclick="irAPosicion(0.25)" style="font-size:11px">25%<br><span style="font-size:9px;font-weight:400">4.25 v.</span></button>
+          <button class="btn-motor btn-motor-test" onclick="irAPosicion(0.50)" style="font-size:11px">50%<br><span style="font-size:9px;font-weight:400">8.5 v.</span></button>
+          <button class="btn-motor btn-motor-test" onclick="irAPosicion(0.75)" style="font-size:11px">75%<br><span style="font-size:9px;font-weight:400">12.75 v.</span></button>
+          <button class="btn-motor" onclick="irAPosicion(1)"    style="background:#002010;border-color:#005030;color:#00e5a0;font-size:11px">ABRIR<br><span style="font-size:9px;font-weight:400">17 v.</span></button>
+          <button class="btn-motor" onclick="hacerHoming()"     style="background:#100020;border-color:#400060;color:#c060ff;font-size:11px">INICIO<br><span style="font-size:9px;font-weight:400">homing</span></button>
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px">
+          INICIO busca el tope automaticamente (sobrecorriente) y pone posicion = 0. Ejecutar siempre al arrancar.
+        </div>
+      </div>
+
+      <div class="motor-grid">
+
+        <!-- VELOCIDAD + MOVIMIENTO FINO -->
+        <div class="motor-section">
+          <div class="motor-section-title">Velocidad y movimiento fino</div>
+          <div class="motor-label">Velocidad (300=rapido · 3000=lento)</div>
+          <div class="vel-row" style="margin:6px 0 10px">
+            <span style="font-size:10px;color:var(--text3)">Rap.</span>
+            <input type="range" id="sliderVel" min="300" max="3000" step="100" value="1500"
+              oninput="document.getElementById('velTxt').textContent=this.value+' µs'"
+              onchange="enviarVelocidad(this.value)" style="flex:1">
+            <span style="font-size:10px;color:var(--text3)">Len.</span>
+          </div>
+          <div class="motor-stat"><span>Velocidad</span><span class="mval" id="velTxt">1500 µs/paso</span></div>
+          <div class="motor-stat"><span>RPM aprox</span><span class="mval" id="rpmTxt">--</span></div>
+          <div style="margin-top:10px">
+            <div class="motor-label">Pasos finos</div>
+            <input type="number" class="motor-input" id="inputPasos" value="207" min="1" max="35224" placeholder="pasos" style="margin-bottom:6px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <button class="btn-motor btn-motor-i" onclick="moverFino('I')">← CERRAR</button>
+              <button class="btn-motor btn-motor-d" onclick="moverFino('D')">ABRIR →</button>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">2072 pasos = 1 vuelta | 207 = 1/10 vuelta</div>
+          </div>
+        </div>
+
+        <!-- CONTROL POR VUELTAS -->
+        <div class="motor-section">
+          <div class="motor-section-title">Control por vueltas</div>
+          <div class="motor-label">Vueltas a mover</div>
+          <input type="number" class="motor-input" id="inputVueltas" value="1" min="0.1" max="17" step="0.5" placeholder="vueltas" style="margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+            <button class="btn-motor btn-motor-i" onclick="moverVueltasInput('I')" style="padding:12px 0">← CERRAR</button>
+            <button class="btn-motor btn-motor-d" onclick="moverVueltasInput('D')" style="padding:12px 0">ABRIR →</button>
+          </div>
+          <div style="border-top:1px solid var(--border);padding-top:10px">
+            <div class="motor-label">Ir directamente a vuelta #</div>
+            <div style="display:flex;gap:6px">
+              <input type="number" class="motor-input" id="inputVueltaTarget" value="8" min="0" max="17" step="0.5" style="flex:1">
+              <button class="btn-motor btn-motor-go" onclick="irAVuelta()" style="flex:1">IR</button>
+            </div>
+            <div style="font-size:10px;color:var(--text3);margin-top:4px">Calcula pasos desde posicion actual</div>
+          </div>
+        </div>
+
+        <!-- ESTADO SENSORES -->
+        <div class="motor-section">
+          <div class="motor-section-title">Sensores del nodo</div>
+          <div class="motor-stat"><span>Corriente motor</span><span class="mval" id="inaAmpTxt">-- mA</span></div>
+          <div class="corriente-bar-wrap"><div class="corriente-bar" id="corrienteBar" style="width:0%;background:var(--green)"></div></div>
+          <div style="font-size:10px;color:var(--text3);margin:2px 0 8px">Libre: ~300–800 mA | Tope: >2500 mA</div>
+          <div class="motor-stat"><span>Voltaje TB6600</span><span class="mval" id="inaVoltTxt">-- V</span></div>
+          <div class="motor-stat"><span>Potencia</span><span class="mval" id="inaWattTxt">-- mW</span></div>
+          <div class="motor-stat"><span>Temperatura</span><span class="mval" id="nodoTempTxt">-- °C</span></div>
+          <div class="motor-stat"><span>Humedad</span><span class="mval" id="nodoHumTxt">-- %</span></div>
+        </div>
+
+      </div>
+
+      <!-- FRANJA TEST INA219 -->
+      <div class="motor-section" style="margin-top:12px;background:rgba(20,0,40,0.3);border-color:#2a0050">
+        <div class="motor-section-title" style="color:var(--purple)">Prueba paso a paso — TEST INA219</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+          <button class="btn-motor btn-motor-test" onclick="testPaso('D',1)">ABRIR +1</button>
+          <button class="btn-motor btn-motor-test" onclick="testPaso('I',1)">CERRAR +1</button>
+          <button class="btn-motor btn-motor-test" onclick="testPaso('D',50)">ABRIR +50</button>
+          <button class="btn-motor btn-motor-test" onclick="testPaso('I',50)">CERRAR +50</button>
+        </div>
+        <div style="margin-top:6px;font-size:10px;color:var(--text3)">
+          Mover pocos pasos y verificar la corriente en "Sensores del nodo". Motor libre: 300–800 mA. Al llegar al tope mecánico (tuerca apretada): >2500 mA → nodo para automáticamente.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- FILA 5: GRAFICA HISTORICA + TABLA -->
   <div class="row-bottom">
 
     <!-- GRAFICA -->
@@ -788,6 +948,9 @@ function actualizar() {
     }
     prevP2 = d.presionP2;
 
+    // Panel motor
+    actualizarMotor(d);
+
     // Heartbeat cada 30 ciclos (~30s)
     if (ciclo % 30 === 0) {
       const loraStr = d.rssi !== 0 ? 'LoRa OK ('+d.rssi+' dBm '+d.calidad+')' : 'Sin enlace LoRa';
@@ -862,6 +1025,117 @@ function actualizarOverlayInundacion(nivel, dist) {
     agregarLog(msgs[nivel] + ' — Dist: ' + dist + ' cm', tipos[nivel] || 'ERR');
   }
   prevNivel = nivel;
+}
+
+// ── MOTOR NEMA17 — Valvula piloto 17 vueltas ────────────────────
+const PASOS_VUELTA  = 2072;
+const VUELTAS_TOTAL = 17;
+const PASOS_TOTAL   = PASOS_VUELTA * VUELTAS_TOTAL;  // 35224
+
+let velActual    = 1500;
+let posMotorActual = 0;   // pasos actuales, actualizado desde /datos
+
+function enviarVelocidad(v) {
+  velActual = parseInt(v);
+  const rpm = Math.round(60000000 / (velActual * 2 * PASOS_VUELTA));
+  document.getElementById('rpmTxt').textContent = rpm + ' RPM aprox';
+  fetch('/cmd?c=VEL:' + v).then(() => agregarLog('Velocidad motor: ' + v + ' µs/paso', 'CMD'));
+}
+
+// Movimiento fino (campo inputPasos)
+function moverFino(dir) {
+  const pasos = parseInt(document.getElementById('inputPasos').value) || 207;
+  const cmd   = dir + pasos;
+  fetch('/cmd?c=' + cmd).then(() => agregarLog('Motor fino: ' + cmd + ' pasos', 'CMD'));
+}
+
+// Movimiento por vueltas (campo inputVueltas)
+function moverVueltasInput(dir) {
+  const vueltas = parseFloat(document.getElementById('inputVueltas').value) || 1;
+  const pasos   = Math.round(vueltas * PASOS_VUELTA);
+  const cmd     = dir + pasos;
+  fetch('/cmd?c=' + cmd).then(() => agregarLog('Motor: ' + dir + ' ' + vueltas + ' vueltas (' + pasos + ' pasos)', 'CMD'));
+}
+
+// Ir a vuelta especifica (calcula delta desde posicion actual)
+function irAVuelta() {
+  const objetivo = parseFloat(document.getElementById('inputVueltaTarget').value);
+  const pasosObjetivo = Math.round(objetivo * PASOS_VUELTA);
+  const delta = pasosObjetivo - posMotorActual;
+  if (delta === 0) { agregarLog('Motor: ya en vuelta ' + objetivo, 'OK'); return; }
+  const dir = delta > 0 ? 'D' : 'I';
+  const cmd = dir + Math.abs(delta);
+  fetch('/cmd?c=' + cmd).then(() =>
+    agregarLog('Motor: ir a vuelta ' + objetivo + ' → ' + cmd, 'CMD'));
+}
+
+// Presets: fraccion 0.0 a 1.0
+function irAPosicion(fraccion) {
+  const pasosObj = Math.round(fraccion * PASOS_TOTAL);
+  const delta    = pasosObj - posMotorActual;
+  if (Math.abs(delta) < 5) { agregarLog('Motor: ya en posicion ' + Math.round(fraccion*100) + '%', 'OK'); return; }
+  const dir = delta > 0 ? 'D' : 'I';
+  const cmd = dir + Math.abs(delta);
+  fetch('/cmd?c=' + cmd).then(() =>
+    agregarLog('Motor preset ' + Math.round(fraccion*100) + '% → ' + cmd, 'CMD'));
+}
+
+// Homing: motor va hasta tope (INA219 detecta sobrecorriente) y pone pos=0
+function hacerHoming() {
+  if (!confirm('INICIO: el motor avanzara hacia el tope hasta detectar sobrecorriente.\nAsegurate de que el mecanismo no tenga obstaculos.\n¿Continuar?')) return;
+  fetch('/cmd?c=INICIO').then(() => agregarLog('Homing iniciado — buscando tope...', 'CMD'));
+}
+
+// Test paso a paso
+function testPaso(dir, pasos) {
+  const cmd = dir + pasos;
+  fetch('/cmd?c=' + cmd).then(() => agregarLog('TEST motor: ' + cmd, 'CMD'));
+}
+
+// ── ACTUALIZAR PANEL MOTOR ───────────────────────────────────────
+function actualizarMotor(d) {
+  const pasos = d.pasos !== undefined ? d.pasos : 0;
+  posMotorActual = pasos;
+
+  // Apertura en % y vueltas
+  const pctAp    = Math.min(100, Math.max(0, (pasos / PASOS_TOTAL) * 100));
+  const vueltas  = (pasos / PASOS_VUELTA).toFixed(1);
+  document.getElementById('motorPos').textContent     = pasos;
+  document.getElementById('motorPct').textContent     = pctAp.toFixed(0) + '%';
+  document.getElementById('motorVueltas').textContent = vueltas + ' / 17 vueltas';
+  document.getElementById('aperturaLbl').textContent  = pctAp.toFixed(0) + '%';
+
+  // Barra de apertura
+  const barra = document.getElementById('aperturaBarra');
+  barra.style.width      = pctAp + '%';
+  barra.style.background = pctAp > 80 ? '#00e5a0' : pctAp > 40 ? '#3a9aff' : pctAp > 10 ? '#ffc030' : '#ff4444';
+
+  // INA219
+  const iA = d.corrienteMA !== undefined ? d.corrienteMA : 0;
+  const iV = d.voltajeV    !== undefined ? d.voltajeV    : 0;
+  const iW = d.potenciaMW  !== undefined ? d.potenciaMW  : 0;
+  document.getElementById('inaAmpTxt').textContent  = iA.toFixed(0) + ' mA';
+  document.getElementById('inaVoltTxt').textContent = iV.toFixed(1) + ' V';
+  document.getElementById('inaWattTxt').textContent = iW.toFixed(0) + ' mW';
+
+  // Barra corriente (0–2500 mA)
+  const pctI     = Math.min(100, (iA / 2500) * 100);
+  const barColor = iA > 2000 ? '#ff4444' : iA > 1000 ? '#ffc030' : '#00e5a0';
+  const bar = document.getElementById('corrienteBar');
+  bar.style.width      = pctI + '%';
+  bar.style.background = barColor;
+
+  // DHT11
+  if (d.temperatura !== undefined) document.getElementById('nodoTempTxt').textContent = d.temperatura.toFixed(1) + ' °C';
+  if (d.humedad     !== undefined) document.getElementById('nodoHumTxt').textContent  = d.humedad.toFixed(0)    + ' %';
+
+  // Badge
+  const badge = document.getElementById('motorEstBadge');
+  if (d.rssi === 0) {
+    badge.textContent = 'SIN NODO'; badge.className = 'panel-badge badge-red';
+  } else {
+    badge.textContent = 'EN LINEA'; badge.className = 'panel-badge badge-green';
+  }
 }
 
 // Log de arranque

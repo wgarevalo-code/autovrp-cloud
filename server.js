@@ -115,6 +115,9 @@ let camara1 = {
   setpoint:     20.0,
   estado:       'ESPERANDO',
   historial:    [],
+  corrienteMA:  0.0,
+  voltajeV:     0.0,
+  potenciaMW:   0.0,
   ultimaActualizacion: null
 };
 

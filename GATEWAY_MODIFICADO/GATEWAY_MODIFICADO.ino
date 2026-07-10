@@ -1,8 +1,6 @@
 // ================================================================
 //  AutoVRP — GATEWAY (Heltec WiFi LoRa 32 V3)
 //  MODIFICADO: envia datos a servidor en la nube (Railway)
-//  Solo se agregaron las funciones enviarANube() y el bloque
-//  #include <HTTPClient.h> — todo lo demas es identico
 // ================================================================
 #include <RadioLib.h>
 #include <Wire.h>
@@ -10,14 +8,9 @@
 #include <WiFiManager.h>
 #include <WebServer.h>
 #include <WiFi.h>
-#include <HTTPClient.h>        // <-- NUEVO
+#include <HTTPClient.h>
 
-// ================================================================
-//  CONFIGURACION — cambia solo esta URL cuando Railway te la de
-// ================================================================
 const char* URL_NUBE = "https://autovrp-cloud-production.up.railway.app/actualizar";
-//  Ejemplo: "https://autovrp.up.railway.app/actualizar"
-// ================================================================
 
 #define LORA_CS    8
 #define LORA_DIO1  14
@@ -36,15 +29,18 @@ int   rssiVal      = 0;
 float snrVal       = 0.0;
 int   posicionNodo = 0;
 
-float presionPSI_P2 = 0.0;
-float presionPSI_P1 = 30.0;
-float humedad       = 0.0;
-float temperatura   = 0.0;   // <-- NUEVO (para cuando conectes el sensor)
-bool  boyaMojada    = false;
-bool  luzEncendida  = false;
-bool  movimientoDet = false;
+float presionPSI_P2   = 0.0;
+float presionPSI_P1   = 30.0;
+float humedad         = 0.0;
+float temperatura     = 0.0;
+bool  boyaMojada      = false;
+bool  luzEncendida    = false;
+bool  movimientoDet   = false;
 int   nivelInundacion = 0;   // 0=seco 1=advertencia 2=critico 3=peligro
-long  distanciaCM     = 0;   // distancia HC-SR04 en cm
+long  distanciaCM     = 0;
+float corrienteMA     = 0.0;
+float voltajeV        = 0.0;
+float potenciaMW      = 0.0;
 
 // ── PID ──────────────────────────────────────────────────────────
 float setpointPSI     = 20.0;
@@ -74,7 +70,7 @@ unsigned long ultimaLectura = 0;
 
 // ── Envio a nube ─────────────────────────────────────────────────
 unsigned long ultimoEnvioNube = 0;
-#define INTERVALO_NUBE 2000    // envia cada 2 segundos
+#define INTERVALO_NUBE 3500   // envia cada 3.5s (mayor que INTERVALO_LEER)
 
 bool esperandoRespuesta = false;
 unsigned long tiempoEnvio = 0;
@@ -82,43 +78,45 @@ unsigned long tiempoEnvio = 0;
 
 void ARDUINO_ISR_ATTR isrRX() { banderaRX = true; }
 
-// ── NUEVA FUNCION: envia datos al servidor en Railway ─────────────
+// ── Enviar datos al servidor Railway ─────────────────────────────
 void enviarANube() {
-  if (!wifiConectado) return;
+  if (!wifiConectado) { Serial.println("Nube: SIN WIFI"); return; }
 
   float grados = ((float)posicionNodo / 400.0) * 360.0;
 
   String json = "{";
-  json += "\"presionP1\":"    + String(presionPSI_P1, 2)              + ",";
-  json += "\"presionP2\":"    + String(presionPSI_P2, 2)              + ",";
-  json += "\"humedad\":"      + String(humedad, 1)                    + ",";
-  json += "\"temperatura\":"  + String(temperatura, 1)                + ",";
-  json += "\"boyaMojada\":"   + String(boyaMojada  ? "true":"false")  + ",";
-  json += "\"luzEncendida\":" + String(luzEncendida? "true":"false")  + ",";
-  json += "\"movimiento\":"   + String(movimientoDet?"true":"false")  + ",";
-  json += "\"pasos\":"        + String(posicionNodo)                  + ",";
-  json += "\"grados\":"       + String(grados, 1)                     + ",";
-  json += "\"rssi\":"         + String(rssiVal)                       + ",";
-  json += "\"snr\":"          + String(snrVal, 1)                     + ",";
-  json += "\"calidad\":\""    + getCalidad(rssiVal)                   + "\",";
-  json += "\"barras\":"       + String(getBarras(rssiVal))            + ",";
-  json += "\"modoAuto\":"         + String(modoAuto  ? "true":"false")  + ",";
-  json += "\"setpoint\":"         + String(setpointPSI, 1)             + ",";
-  json += "\"nivelInundacion\":"  + String(nivelInundacion)            + ",";
-  json += "\"distanciaCM\":"      + String(distanciaCM)                + ",";
-  json += "\"boyaMojada\":"       + String(nivelInundacion>0?"true":"false") + ",";
-  json += "\"estado\":\""         + estadoActual                       + "\"";
+  json += "\"presionP1\":"       + String(presionPSI_P1, 2)                   + ",";
+  json += "\"presionP2\":"       + String(presionPSI_P2, 2)                   + ",";
+  json += "\"humedad\":"         + String(humedad, 1)                         + ",";
+  json += "\"temperatura\":"     + String(temperatura, 1)                     + ",";
+  json += "\"nivelInundacion\":" + String(nivelInundacion)                    + ",";
+  json += "\"distanciaCM\":"     + String(distanciaCM)                        + ",";
+  json += "\"boyaMojada\":"      + String(nivelInundacion > 0 ? "true":"false") + ",";
+  json += "\"luzEncendida\":"    + String(luzEncendida ? "true":"false")      + ",";
+  json += "\"movimiento\":"      + String(movimientoDet ? "true":"false")     + ",";
+  json += "\"pasos\":"           + String(posicionNodo)                       + ",";
+  json += "\"grados\":"          + String(grados, 1)                          + ",";
+  json += "\"rssi\":"            + String(rssiVal)                            + ",";
+  json += "\"snr\":"             + String(snrVal, 1)                          + ",";
+  json += "\"calidad\":\""       + getCalidad(rssiVal)                        + "\",";
+  json += "\"barras\":"          + String(getBarras(rssiVal))                 + ",";
+  json += "\"modoAuto\":"        + String(modoAuto ? "true":"false")          + ",";
+  json += "\"setpoint\":"        + String(setpointPSI, 1)                     + ",";
+  json += "\"corrienteMA\":"     + String(corrienteMA, 0)                    + ",";
+  json += "\"voltajeV\":"        + String(voltajeV, 2)                       + ",";
+  json += "\"potenciaMW\":"      + String(potenciaMW, 0)                     + ",";
+  json += "\"estado\":\""        + estadoActual                               + "\"";
   json += "}";
 
   HTTPClient http;
   http.begin(URL_NUBE);
-  http.setTimeout(1500);   // maximo 1.5 segundos — no bloquea el loop LoRa
+  http.setTimeout(1500);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(json);
   http.end();
-
   Serial.println("Nube: " + String(code));
 }
+
 // ─────────────────────────────────────────────────────────────────
 
 void dibujarOLED() {
@@ -128,7 +126,11 @@ void dibujarOLED() {
   oled.drawLine(0, 11, 128, 11);
   oled.drawString(0, 13, wifiConectado ? "autovrp-cloud.up.railway.app" : "Sin WiFi");
   oled.drawString(0, 24, "P2:" + String(presionPSI_P2, 1) + " SP:" + String(setpointPSI, 0) + " PSI");
-  oled.drawString(0, 35, (modoAuto ? "[AUTO] " : "[MAN] ") + estadoActual);
+  String nivelStr = "";
+  if      (nivelInundacion == 1) nivelStr = " ADVT";
+  else if (nivelInundacion == 2) nivelStr = " CRIT";
+  else if (nivelInundacion >= 3) nivelStr = " PELIGRO";
+  oled.drawString(0, 35, (modoAuto ? "[AUTO] " : "[MAN] ") + estadoActual + nivelStr);
   oled.drawRect(0, 47, 55, 8);
   if (rssiVal != 0) {
     int bw = map(constrain(rssiVal, -110, -30), -110, -30, 0, 53);
@@ -208,7 +210,66 @@ void controlPID() {
   dibujarOLED();
 }
 
-// ── Web server local (identico al original) ───────────────────────
+void parsearRespuesta(String rxStr) {
+  int idxP = rxStr.indexOf("P:");
+  if (idxP >= 0) {
+    int idxE = rxStr.indexOf(' ', idxP);
+    if (idxE < 0) idxE = rxStr.length();
+    posicionNodo = rxStr.substring(idxP+2, idxE).toInt();
+  }
+  int idxPsi = rxStr.indexOf("PSI:");
+  if (idxPsi >= 0) {
+    int idxE = rxStr.indexOf(' ', idxPsi);
+    if (idxE < 0) idxE = rxStr.length();
+    presionPSI_P2 = rxStr.substring(idxPsi+4, idxE).toFloat();
+    agregarHistorial(presionPSI_P2);
+  }
+  int idxBoya = rxStr.indexOf("BOYA:");
+  if (idxBoya >= 0) {
+    int idxE = rxStr.indexOf(' ', idxBoya);
+    if (idxE < 0) idxE = rxStr.length();
+    nivelInundacion = rxStr.substring(idxBoya+5, idxE).toInt();
+    boyaMojada = (nivelInundacion > 0);
+  }
+  int idxDist = rxStr.indexOf("DIST:");
+  if (idxDist >= 0) {
+    int idxE = rxStr.indexOf(' ', idxDist);
+    if (idxE < 0) idxE = rxStr.length();
+    distanciaCM = rxStr.substring(idxDist+5, idxE).toInt();
+  }
+  int idxT = rxStr.indexOf(" T:");
+  if (idxT >= 0) {
+    int idxE = rxStr.indexOf(' ', idxT+1);
+    if (idxE < 0) idxE = rxStr.length();
+    temperatura = rxStr.substring(idxT+3, idxE).toFloat();
+  }
+  int idxH = rxStr.indexOf(" H:");
+  if (idxH >= 0) {
+    int idxE = rxStr.indexOf(' ', idxH+1);
+    if (idxE < 0) idxE = rxStr.length();
+    humedad = rxStr.substring(idxH+3, idxE).toFloat();
+  }
+  int idxI = rxStr.indexOf(" I:");
+  if (idxI >= 0) {
+    int idxE = rxStr.indexOf(' ', idxI+1);
+    if (idxE < 0) idxE = rxStr.length();
+    corrienteMA = rxStr.substring(idxI+3, idxE).toFloat();
+  }
+  int idxV = rxStr.indexOf(" V:");
+  if (idxV >= 0) {
+    int idxE = rxStr.indexOf(' ', idxV+1);
+    if (idxE < 0) idxE = rxStr.length();
+    voltajeV = rxStr.substring(idxV+3, idxE).toFloat();
+  }
+  int idxW = rxStr.indexOf(" W:");
+  if (idxW >= 0) {
+    int idxE = rxStr.indexOf(' ', idxW+1);
+    if (idxE < 0) idxE = rxStr.length();
+    potenciaMW = rxStr.substring(idxW+3, idxE).toFloat();
+  }
+}
+
+// ── Web server local ──────────────────────────────────────────────
 void handleRoot() {
   server.sendHeader("Location", "https://autovrp-cloud-production.up.railway.app", true);
   server.send(302, "text/plain", "");
@@ -217,23 +278,28 @@ void handleRoot() {
 void handleDatos() {
   float grados = ((float)posicionNodo / 400.0) * 360.0;
   String json = "{";
-  json += "\"rssi\":"         + String(rssiVal)             + ",";
-  json += "\"snr\":"          + String(snrVal,1)            + ",";
-  json += "\"pasos\":"        + String(posicionNodo)        + ",";
-  json += "\"grados\":"       + String(grados,1)            + ",";
-  json += "\"presionP1\":"    + String(presionPSI_P1,2)     + ",";
-  json += "\"presionP2\":"    + String(presionPSI_P2,2)     + ",";
-  json += "\"humedad\":"      + String(humedad,1)           + ",";
-  json += "\"temperatura\":"  + String(temperatura,1)       + ",";
-  json += "\"boyaMojada\":"   + String(boyaMojada?"true":"false")    + ",";
-  json += "\"luzEncendida\":" + String(luzEncendida?"true":"false")  + ",";
-  json += "\"movimiento\":"   + String(movimientoDet?"true":"false") + ",";
-  json += "\"calidad\":\""    + getCalidad(rssiVal) + "\",";
-  json += "\"barras\":"       + String(getBarras(rssiVal))  + ",";
-  json += "\"modoAuto\":"     + String(modoAuto?"true":"false") + ",";
-  json += "\"setpoint\":"     + String(setpointPSI,1)       + ",";
-  json += "\"estado\":\""     + estadoActual + "\",";
-  json += "\"historial\":"    + getHistorialJSON();
+  json += "\"rssi\":"            + String(rssiVal)                            + ",";
+  json += "\"snr\":"             + String(snrVal,1)                           + ",";
+  json += "\"pasos\":"           + String(posicionNodo)                       + ",";
+  json += "\"grados\":"          + String(grados,1)                           + ",";
+  json += "\"presionP1\":"       + String(presionPSI_P1,2)                    + ",";
+  json += "\"presionP2\":"       + String(presionPSI_P2,2)                    + ",";
+  json += "\"humedad\":"         + String(humedad,1)                          + ",";
+  json += "\"temperatura\":"     + String(temperatura,1)                      + ",";
+  json += "\"boyaMojada\":"      + String(boyaMojada?"true":"false")          + ",";
+  json += "\"nivelInundacion\":" + String(nivelInundacion)                    + ",";
+  json += "\"distanciaCM\":"     + String(distanciaCM)                        + ",";
+  json += "\"luzEncendida\":"    + String(luzEncendida?"true":"false")        + ",";
+  json += "\"movimiento\":"      + String(movimientoDet?"true":"false")       + ",";
+  json += "\"calidad\":\""       + getCalidad(rssiVal)                        + "\",";
+  json += "\"barras\":"          + String(getBarras(rssiVal))                 + ",";
+  json += "\"modoAuto\":"        + String(modoAuto?"true":"false")            + ",";
+  json += "\"setpoint\":"        + String(setpointPSI,1)                      + ",";
+  json += "\"corrienteMA\":"     + String(corrienteMA, 0)                    + ",";
+  json += "\"voltajeV\":"        + String(voltajeV, 2)                       + ",";
+  json += "\"potenciaMW\":"      + String(potenciaMW, 0)                     + ",";
+  json += "\"estado\":\""        + estadoActual                               + "\",";
+  json += "\"historial\":"       + getHistorialJSON();
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -278,35 +344,6 @@ void handleCmd() {
   server.send(200,"text/plain","OK");
 }
 
-void parsearRespuesta(String rxStr) {
-  int idxP = rxStr.indexOf("P:");
-  if (idxP >= 0) {
-    int idxE = rxStr.indexOf(' ', idxP);
-    if (idxE < 0) idxE = rxStr.length();
-    posicionNodo = rxStr.substring(idxP+2, idxE).toInt();
-  }
-  int idxPsi = rxStr.indexOf("PSI:");
-  if (idxPsi >= 0) {
-    int idxE = rxStr.indexOf(' ', idxPsi);
-    if (idxE < 0) idxE = rxStr.length();
-    presionPSI_P2 = rxStr.substring(idxPsi+4, idxE).toFloat();
-    agregarHistorial(presionPSI_P2);
-  }
-  int idxBoya = rxStr.indexOf("BOYA:");
-  if (idxBoya >= 0) {
-    int idxE = rxStr.indexOf(' ', idxBoya);
-    if (idxE < 0) idxE = rxStr.length();
-    nivelInundacion = rxStr.substring(idxBoya+5, idxE).toInt();
-    boyaMojada = (nivelInundacion > 0);
-  }
-  int idxDist = rxStr.indexOf("DIST:");
-  if (idxDist >= 0) {
-    int idxE = rxStr.indexOf(' ', idxDist);
-    if (idxE < 0) idxE = rxStr.length();
-    distanciaCM = rxStr.substring(idxDist+5, idxE).toInt();
-  }
-}
-
 void setup() {
   Serial.begin(115200);
   delay(300);
@@ -325,10 +362,11 @@ void setup() {
     server.on("/cmd",   handleCmd);
     server.begin();
     estadoActual = "WiFi OK";
-    Serial.println("Dashboard: https://autovrp-cloud-production.up.railway.app");
-    Serial.println("Nube: " + String(URL_NUBE));
+    Serial.println("WiFi conectado");
+    Serial.println("URL: " + String(URL_NUBE));
   } else {
     estadoActual = "SIN WIFI";
+    Serial.println("WiFi FALLO");
   }
   dibujarOLED();
   int r = radio.begin(915.0, 125.0, 9, 7, 0xAB, 10, 8);
@@ -336,35 +374,40 @@ void setup() {
   radio.setDio1Action(isrRX);
   radio.startReceive();
   estadoActual = "ESCUCHANDO"; dibujarOLED();
+  Serial.println("Gateway listo");
 }
 
 void loop() {
   if (wifiConectado) server.handleClient();
 
+  // Timeout respuesta LoRa
   if (esperandoRespuesta && millis()-tiempoEnvio > TIMEOUT_RESPUESTA) {
     esperandoRespuesta = false;
     Serial.println("Timeout LoRa");
   }
 
+  // Enviar a nube (primero, antes de LEER)
+  if (!esperandoRespuesta && !banderaRX && millis()-ultimoEnvioNube >= INTERVALO_NUBE) {
+    ultimoEnvioNube = millis();
+    enviarANube();
+  }
+
+  // Enviar LEER al nodo
   if (!esperandoRespuesta && millis()-ultimaLectura >= INTERVALO_LEER) {
     ultimaLectura = millis();
     enviarLoRa("LEER");
   }
 
+  // PID automatico
   if (modoAuto && !esperandoRespuesta && millis()-ultimoPID >= INTERVALO_PID) {
     ultimoPID = millis();
     controlPID();
   }
 
-  // ── Enviar a nube solo cuando LoRa no esta ocupado ───────────
-  if (!esperandoRespuesta && !banderaRX && millis() - ultimoEnvioNube >= INTERVALO_NUBE) {
-    ultimoEnvioNube = millis();
-    enviarANube();
-  }
-  // ─────────────────────────────────────────────────────────────
-
+  // Recibir respuesta LoRa
   if (banderaRX) {
-    banderaRX = false; esperandoRespuesta = false;
+    banderaRX = false;
+    esperandoRespuesta = false;
     String rxStr;
     int r = radio.readData(rxStr);
     if (r == RADIOLIB_ERR_NONE) {
@@ -375,6 +418,7 @@ void loop() {
       Serial.println("RX: " + rxStr + " RSSI:" + String(rssiVal));
       if (rxStr.startsWith("OK")) parsearRespuesta(rxStr);
     }
-    radio.startReceive(); dibujarOLED();
+    radio.startReceive();
+    dibujarOLED();
   }
 }
