@@ -171,7 +171,7 @@ function tgAlerta(texto) {
 function enviarAlertaInundacion(nivel, dist, esRepeticion) {
   const emoji   = nivelEmoji(nivel);
   const nombre  = nivelNombre(nivel);
-  const hora    = new Date().toLocaleTimeString('es-EC');
+  const hora    = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
   const rep     = esRepeticion ? `\n⏰ <i>Repeticion #${alarmaRepeticion} — sin acuse de recibo</i>` : '';
 
   const texto =
@@ -213,7 +213,7 @@ function procesarComando(chatId, texto, req) {
 
   const d = camara1;
   const sync = d.ultimaActualizacion
-    ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC')
+    ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })
     : 'Sin datos';
 
   const rol = getRol(chatId);
@@ -416,7 +416,7 @@ function procesarComando(chatId, texto, req) {
     case '/test': {
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ Solo el administrador puede enviar pruebas.'); break; }
       const destinos = chatsConAlertas();
-      const hora = new Date().toLocaleTimeString('es-EC');
+      const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
       destinos.forEach(id => tgEnviar(id,
         `🔔 <b>PRUEBA DE NOTIFICACION — AutoVRP</b>\n\n` +
         `✅ El sistema de alertas funciona correctamente.\n` +
@@ -495,7 +495,7 @@ app.post(`/webhook/${TG_TOKEN}`, (req, res) => {
       tgAlerta(`✅ <b>Alerta acusada</b> por <b>${nombre}</b>\nSe detienen las repeticiones automaticas.`);
     } else if (data === 'ver_estado') {
       const d    = camara1;
-      const sync = d.ultimaActualizacion ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC') : '--';
+      const sync = d.ultimaActualizacion ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' }) : '--';
       tgAnswerCallback(cb.id, 'Cargando estado...');
       tgEnviar(chatId,
         `<b>📊 Estado — Camara 1</b>\n\n` +
@@ -549,7 +549,7 @@ app.post('/actualizar', (req, res) => {
     alarmaActiva  = false;
     alarmaAcusada = false;
     detenerRepeticionAlarma();
-    tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nEl nivel de agua volvio a normal.\n🕐 ${new Date().toLocaleTimeString('es-EC')}`);
+    tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nEl nivel de agua volvio a normal.\n🕐 ${new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}`);
     registrarEvento('gateway', 'INUNDACION_RESUELTA', 'Nivel volvio a 0');
   }
   estadoAnterior.nivelInundacion = nivelActual;
