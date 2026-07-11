@@ -37,11 +37,12 @@ float temperatura     = 0.0;
 bool  boyaMojada      = false;
 bool  luzEncendida    = false;
 bool  movimientoDet   = false;
-int   nivelInundacion = 0;   // 0=seco 1=advertencia 2=critico 3=peligro
+int   nivelInundacion = 0;
 long  distanciaCM     = 0;
 float corrienteMA     = 0.0;
 float voltajeV        = 0.0;
 float potenciaMW      = 0.0;
+bool  nodoManual      = false;   // true cuando tecnico activo modo manual en el nodo
 
 // ── PID ──────────────────────────────────────────────────────────
 float setpointPSI     = 20.0;
@@ -162,6 +163,7 @@ void enviarANube() {
   json += "\"corrienteMA\":"     + String(corrienteMA, 0)                    + ",";
   json += "\"voltajeV\":"        + String(voltajeV, 2)                       + ",";
   json += "\"potenciaMW\":"      + String(potenciaMW, 0)                     + ",";
+  json += "\"nodoManual\":"      + String(nodoManual ? "true" : "false")     + ",";
   json += "\"estado\":\""        + estadoActual                               + "\"";
   json += "}";
 
@@ -261,6 +263,7 @@ void enviarLoRa(String cmd) {
 
 void controlPID() {
   if (!modoAuto) return;
+  if (nodoManual) { estadoActual = "MANUAL FISICO"; dibujarOLED(); return; }
   if (millis() - ultimoMovimientoGW < TIEMPO_ESTABILIZACION) {
     estadoActual = "ESTABILIZANDO"; dibujarOLED(); return;
   }
@@ -289,12 +292,27 @@ void parsearRespuesta(String rxStr) {
     if (idxE < 0) idxE = rxStr.length();
     posicionNodo = rxStr.substring(idxP+2, idxE).toInt();
   }
-  int idxPsi = rxStr.indexOf("PSI:");
-  if (idxPsi >= 0) {
-    int idxE = rxStr.indexOf(' ', idxPsi);
+  // PSI1 = aguas arriba (P1), PSI2 = aguas abajo (P2)
+  int idxPsi1 = rxStr.indexOf("PSI1:");
+  if (idxPsi1 >= 0) {
+    int idxE = rxStr.indexOf(' ', idxPsi1);
     if (idxE < 0) idxE = rxStr.length();
-    presionPSI_P2 = rxStr.substring(idxPsi+4, idxE).toFloat();
+    presionPSI_P1 = rxStr.substring(idxPsi1+5, idxE).toFloat();
+  }
+  int idxPsi2 = rxStr.indexOf("PSI2:");
+  if (idxPsi2 >= 0) {
+    int idxE = rxStr.indexOf(' ', idxPsi2);
+    if (idxE < 0) idxE = rxStr.length();
+    presionPSI_P2 = rxStr.substring(idxPsi2+5, idxE).toFloat();
     agregarHistorial(presionPSI_P2);
+  }
+  // MOD:M = manual fisico activo, MOD:A = auto
+  int idxMod = rxStr.indexOf("MOD:");
+  if (idxMod >= 0) {
+    int idxE = rxStr.indexOf(' ', idxMod);
+    if (idxE < 0) idxE = rxStr.length();
+    String mod = rxStr.substring(idxMod+4, idxE);
+    nodoManual = (mod == "M");
   }
   int idxBoya = rxStr.indexOf("BOYA:");
   if (idxBoya >= 0) {

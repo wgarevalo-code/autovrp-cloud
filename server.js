@@ -122,7 +122,7 @@ let camara1 = {
 };
 
 // Estado anterior para detectar alertas
-let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0 };
+let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0 };
 
 // ── Cola de comandos (dashboard → gateway → nodo via LoRa) ────────
 // El gateway lee comandoPendiente en cada POST /actualizar y lo ejecuta
@@ -560,9 +560,31 @@ app.post('/actualizar', (req, res) => {
     registrarEvento('gateway', 'INUNDACION_RESUELTA', 'Nivel volvio a 0');
   }
   estadoAnterior.nivelInundacion = nivelActual;
+
   if (!antMov && camara1.movimiento) {
     tgAlerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
     registrarEvento('gateway', 'ALERTA_MOVIMIENTO', 'Movimiento detectado');
+  }
+
+  // Detectar cambio de modo MANUAL / AUTO en el nodo
+  const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
+  if (!estadoAnterior.nodoManual && camara1.nodoManual) {
+    tgAlerta(`🔧 <b>MODO MANUAL activado — Camara 1</b>\nTecnico en sitio. PID pausado.\n📊 P1: ${camara1.presionP1?.toFixed(1)} PSI | P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    registrarEvento('nodo', 'MODO_MANUAL', 'Boton fisico activado en camara');
+  }
+  if (estadoAnterior.nodoManual && !camara1.nodoManual) {
+    tgAlerta(`🤖 <b>MODO AUTOMATICO restaurado — Camara 1</b>\nPID activo. Setpoint: ${camara1.setpoint?.toFixed(1)} PSI\n📊 P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    registrarEvento('nodo', 'MODO_AUTO', 'Sistema vuelve a control automatico');
+  }
+  estadoAnterior.nodoManual = camara1.nodoManual || false;
+
+  // Notificar cambio significativo de presion P2 (> 2 PSI)
+  const p2Actual = camara1.presionP2 || 0;
+  if (Math.abs(p2Actual - estadoAnterior.presionP2) >= 2.0 && p2Actual > 0) {
+    const dir = p2Actual > estadoAnterior.presionP2 ? '⬆️' : '⬇️';
+    tgAlerta(`${dir} <b>Presion P2 ajustada — Camara 1</b>\nAnterior: ${estadoAnterior.presionP2.toFixed(1)} PSI → Actual: ${p2Actual.toFixed(1)} PSI\nSetpoint: ${camara1.setpoint?.toFixed(1)} PSI\n🕐 ${hora}`);
+    estadoAnterior.presionP2 = p2Actual;
+    registrarEvento('gateway', 'CAMBIO_PRESION', `P2: ${estadoAnterior.presionP2.toFixed(1)}→${p2Actual.toFixed(1)} PSI`);
   }
 
   // Devolver comando pendiente al gateway (si hay uno)
