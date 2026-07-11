@@ -10,7 +10,8 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-const char* URL_NUBE = "https://autovrp-cloud-production.up.railway.app/actualizar";
+const char* URL_NUBE     = "https://autovrp-cloud-production.up.railway.app/actualizar";
+const char* URL_CMD_POLL = "https://autovrp-cloud-production.up.railway.app/cmd-pendiente";
 
 #define LORA_CS    8
 #define LORA_DIO1  14
@@ -72,6 +73,10 @@ unsigned long ultimaLectura = 0;
 unsigned long ultimoEnvioNube = 0;
 #define INTERVALO_NUBE 3500   // envia cada 3.5s (mayor que INTERVALO_LEER)
 
+// ── Poll rapido de comandos ───────────────────────────────────────
+unsigned long ultimoCheckCmd = 0;
+#define INTERVALO_CMD 500     // consulta Railway por comandos cada 500ms
+
 bool esperandoRespuesta = false;
 unsigned long tiempoEnvio = 0;
 #define TIMEOUT_RESPUESTA 6000
@@ -79,6 +84,30 @@ unsigned long tiempoEnvio = 0;
 void ARDUINO_ISR_ATTR isrRX() { banderaRX = true; }
 
 // ── Enviar datos al servidor Railway ─────────────────────────────
+void checkCmdNube() {
+  if (!wifiConectado) return;
+  HTTPClient http;
+  http.begin(URL_CMD_POLL);
+  http.setTimeout(800);
+  int code = http.GET();
+  if (code == 200) {
+    String resp = http.getString();
+    int idxCmd = resp.indexOf("\"cmd\":\"");
+    if (idxCmd >= 0) {
+      int ini = idxCmd + 7;
+      int fin = resp.indexOf("\"", ini);
+      if (fin > ini) {
+        String cmd = resp.substring(ini, fin);
+        if (cmd.length() > 0) {
+          Serial.println("CMD rapido: " + cmd);
+          ejecutarCmdNube(cmd);
+        }
+      }
+    }
+  }
+  http.end();
+}
+
 void ejecutarCmdNube(String cmd) {
   cmd.trim();
   if (cmd.length() == 0) return;
@@ -427,6 +456,12 @@ void loop() {
   if (esperandoRespuesta && millis()-tiempoEnvio > TIMEOUT_RESPUESTA) {
     esperandoRespuesta = false;
     Serial.println("Timeout LoRa");
+  }
+
+  // Poll rapido de comandos cada 500ms (sin bloquear si hay LoRa pendiente)
+  if (!esperandoRespuesta && !banderaRX && millis()-ultimoCheckCmd >= INTERVALO_CMD) {
+    ultimoCheckCmd = millis();
+    checkCmdNube();
   }
 
   // Enviar a nube (primero, antes de LEER)

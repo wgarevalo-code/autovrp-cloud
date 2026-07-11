@@ -592,8 +592,6 @@ app.get('/datos', (req, res) => {
 });
 
 // ── Relay de comandos del dashboard al gateway ────────────────────
-// El dashboard llama a GET /cmd?c=COMANDO
-// Railway guarda el comando; el gateway lo lee en el proximo /actualizar
 app.get('/cmd', (req, res) => {
   const cmd = (req.query.c || '').trim();
   if (!cmd) return res.status(400).json({ error: 'Sin comando' });
@@ -601,6 +599,16 @@ app.get('/cmd', (req, res) => {
   console.log('CMD pendiente:', cmd);
   registrarEvento('dashboard', 'CMD', cmd);
   res.json({ ok: true, cmd });
+});
+
+// Gateway consulta este endpoint cada 500ms para recoger comandos rapido
+app.get('/cmd-pendiente', (req, res) => {
+  const cmd = comandoPendiente || '';
+  if (comandoPendiente) {
+    console.log('CMD recogido por gateway:', comandoPendiente);
+    comandoPendiente = null;
+  }
+  res.json({ cmd });
 });
 
 // ── Log de eventos del servidor ───────────────────────────────────
