@@ -265,10 +265,10 @@ void setup() {
   pinMode(PIN_STEP, OUTPUT); pinMode(PIN_DIR, OUTPUT);
   digitalWrite(PIN_STEP, LOW); digitalWrite(PIN_DIR, LOW);
 
-  // Botones
-  pinMode(BTN_MANUAL, INPUT);
-  pinMode(BTN_DER,    INPUT);
-  pinMode(BTN_IZQ,    INPUT);
+  // Botones (desactivados temporalmente - pines flotantes)
+  // pinMode(BTN_MANUAL, INPUT);
+  // pinMode(BTN_DER,    INPUT);
+  // pinMode(BTN_IZQ,    INPUT);
 
   // Kill switch / HC-SR04
   pinMode(TRIG, OUTPUT); pinMode(ECHO, INPUT);
@@ -306,27 +306,6 @@ void setup() {
 
 void loop() {
   unsigned long ahora = millis();
-
-  // ── Botones fisicos ──────────────────────────────────────────
-  if (digitalRead(BTN_MANUAL) == HIGH && ahora - tsManual > DEBOUNCE) {
-    tsManual = ahora;
-    modoManual = !modoManual;
-    Serial.println(modoManual ? "BTN MANUAL ON" : "BTN MANUAL OFF");
-    enviarEstado();   // avisa al gateway del cambio de modo
-  }
-
-  if (modoManual) {
-    if (digitalRead(BTN_DER) == HIGH && ahora - tsDer > DEBOUNCE) {
-      tsDer = ahora;
-      mover(true, PASOS_BOTON);
-      enviarEstado();
-    }
-    if (digitalRead(BTN_IZQ) == HIGH && ahora - tsIzq > DEBOUNCE) {
-      tsIzq = ahora;
-      mover(false, PASOS_BOTON);
-      enviarEstado();
-    }
-  }
 
   // ── Sensores periodicos ──────────────────────────────────────
   if (ahora - ultimoPresion >= INTERVALO_PRESION) {
