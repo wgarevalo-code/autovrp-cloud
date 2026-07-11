@@ -79,6 +79,34 @@ unsigned long tiempoEnvio = 0;
 void ARDUINO_ISR_ATTR isrRX() { banderaRX = true; }
 
 // ── Enviar datos al servidor Railway ─────────────────────────────
+void ejecutarCmdNube(String cmd) {
+  cmd.trim();
+  if (cmd.length() == 0) return;
+  Serial.println("CMD nube: " + cmd);
+
+  if (cmd == "STOP") {
+    modoAuto = false; enviarLoRa("STOP"); estadoActual = "PARADA"; dibujarOLED(); return;
+  }
+  if (cmd == "LUZTOGGLE") {
+    luzEncendida = !luzEncendida; enviarLoRa(luzEncendida ? "LUZON" : "LUZOFF"); return;
+  }
+  if (cmd.startsWith("SET")) {
+    float sp = cmd.substring(3).toFloat();
+    if (sp < presionPSI_P1) { setpointPSI = sp; integralError = 0; errorAnterior = 0; } return;
+  }
+  if (cmd.startsWith("PID")) {
+    String v = cmd.substring(3); int c1 = v.indexOf(','), c2 = v.lastIndexOf(',');
+    if (c1>0 && c2>c1) { Kp=v.substring(0,c1).toFloat(); Ki=v.substring(c1+1,c2).toFloat(); Kd=v.substring(c2+1).toFloat(); } return;
+  }
+  if (cmd.startsWith("MODO")) {
+    modoAuto = (cmd.substring(4) == "1"); integralError = 0; errorAnterior = 0; ultimoMovimientoGW = 0;
+    estadoActual = modoAuto ? "AUTO PID" : "MANUAL"; dibujarOLED(); return;
+  }
+  // Todo lo demas (D, I, STOP, VEL:, INICIO, etc.) va directo al nodo
+  enviarLoRa(cmd);
+  if (cmd.charAt(0)=='D' || cmd.charAt(0)=='I') ultimoMovimientoGW = millis();
+}
+
 void enviarANube() {
   if (!wifiConectado) { Serial.println("Nube: SIN WIFI"); return; }
 
@@ -113,6 +141,21 @@ void enviarANube() {
   http.setTimeout(1500);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(json);
+
+  // Leer respuesta para ver si hay comando pendiente del dashboard
+  if (code == 200) {
+    String resp = http.getString();
+    int idxCmd = resp.indexOf("\"cmd\":\"");
+    if (idxCmd >= 0) {
+      int ini = idxCmd + 7;
+      int fin = resp.indexOf("\"", ini);
+      if (fin > ini) {
+        String cmd = resp.substring(ini, fin);
+        ejecutarCmdNube(cmd);
+      }
+    }
+  }
+
   http.end();
   Serial.println("Nube: " + String(code));
 }

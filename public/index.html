@@ -779,16 +779,6 @@ setInterval(() => {
 }, 1000);
 
 // ── MODOS ────────────────────────────────────────────────────────
-function setModo(m) {
-  modo = m;
-  document.getElementById('btnAuto').classList.toggle('active',   m==='auto');
-  document.getElementById('btnManual').classList.toggle('active', m==='manual');
-  document.getElementById('panelAuto').style.display   = m==='auto'   ? 'block' : 'none';
-  document.getElementById('panelManual').style.display = m==='manual' ? 'block' : 'none';
-  document.getElementById('badgeModo').textContent = m==='auto' ? 'AUTO PID' : 'MANUAL';
-  fetch('/cmd?c=MODO'+(m==='auto'?'1':'0')).then(()=>agregarLog('Modo cambiado: '+m.toUpperCase(),'CMD'));
-}
-
 function spLocal(v) {
   spLocal_val = parseFloat(v);
   document.getElementById('spVal').textContent = spLocal_val;
@@ -797,29 +787,27 @@ function spLocal(v) {
   document.getElementById('spVal').classList.toggle('warn', warn);
 }
 
-function enviarSP(v) {
-  if (parseFloat(v) >= p1Actual) { agregarLog('Setpoint rechazado: supera P1 ('+p1Actual+' PSI)','ERR'); return; }
-  fetch('/cmd?c=SET'+v).then(()=>agregarLog('Setpoint enviado: '+v+' PSI','CMD'));
-}
-
-function enviarPID() {
-  const kp=document.getElementById('inKp').value;
-  const ki=document.getElementById('inKi').value;
-  const kd=document.getElementById('inKd').value;
-  fetch('/cmd?c=PID'+kp+','+ki+','+kd).then(()=>agregarLog('PID actualizado Kp='+kp+' Ki='+ki+' Kd='+kd,'CMD'));
+function enviarCmd(c, logMsg, logTipo) {
+  return fetch('/cmd?c=' + encodeURIComponent(c))
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(() => agregarLog(logMsg || ('CMD: ' + c), logTipo || 'CMD'))
+    .catch(e  => agregarLog('Error enviando CMD: ' + c + ' — ' + e.message, 'ERR'));
 }
 
 function pararMotor() {
-  fetch('/cmd?c=STOP').then(()=>agregarLog('!! PARADA DE EMERGENCIA !!','WARN'));
+  enviarCmd('STOP', '!! PARADA DE EMERGENCIA !!', 'WARN');
 }
 
 function girarManual(dir) {
   const c = dir==='der' ? 'D20' : 'I20';
-  fetch('/cmd?c='+c).then(()=>agregarLog('Motor: '+c,'CMD'));
+  enviarCmd(c, 'Motor manual: ' + c);
 }
 
 function toggleLuz() {
-  fetch('/cmd?c=LUZTOGGLE').then(()=>agregarLog('Luz: toggle','CMD'));
+  enviarCmd('LUZTOGGLE', 'Luz: toggle');
 }
 
 // ── ACTUALIZAR ───────────────────────────────────────────────────
@@ -1039,57 +1027,69 @@ function enviarVelocidad(v) {
   velActual = parseInt(v);
   const rpm = Math.round(60000000 / (velActual * 2 * PASOS_VUELTA));
   document.getElementById('rpmTxt').textContent = rpm + ' RPM aprox';
-  fetch('/cmd?c=VEL:' + v).then(() => agregarLog('Velocidad motor: ' + v + ' µs/paso', 'CMD'));
+  enviarCmd('VEL:' + v, 'Velocidad motor: ' + v + ' µs/paso');
 }
 
-// Movimiento fino (campo inputPasos)
 function moverFino(dir) {
   const pasos = parseInt(document.getElementById('inputPasos').value) || 207;
   const cmd   = dir + pasos;
-  fetch('/cmd?c=' + cmd).then(() => agregarLog('Motor fino: ' + cmd + ' pasos', 'CMD'));
+  enviarCmd(cmd, 'Motor fino: ' + cmd + ' pasos');
 }
 
-// Movimiento por vueltas (campo inputVueltas)
 function moverVueltasInput(dir) {
   const vueltas = parseFloat(document.getElementById('inputVueltas').value) || 1;
   const pasos   = Math.round(vueltas * PASOS_VUELTA);
   const cmd     = dir + pasos;
-  fetch('/cmd?c=' + cmd).then(() => agregarLog('Motor: ' + dir + ' ' + vueltas + ' vueltas (' + pasos + ' pasos)', 'CMD'));
+  enviarCmd(cmd, 'Motor: ' + dir + ' ' + vueltas + ' vueltas (' + pasos + ' pasos)');
 }
 
-// Ir a vuelta especifica (calcula delta desde posicion actual)
 function irAVuelta() {
-  const objetivo = parseFloat(document.getElementById('inputVueltaTarget').value);
+  const objetivo     = parseFloat(document.getElementById('inputVueltaTarget').value);
   const pasosObjetivo = Math.round(objetivo * PASOS_VUELTA);
-  const delta = pasosObjetivo - posMotorActual;
-  if (delta === 0) { agregarLog('Motor: ya en vuelta ' + objetivo, 'OK'); return; }
-  const dir = delta > 0 ? 'D' : 'I';
-  const cmd = dir + Math.abs(delta);
-  fetch('/cmd?c=' + cmd).then(() =>
-    agregarLog('Motor: ir a vuelta ' + objetivo + ' → ' + cmd, 'CMD'));
+  const delta        = pasosObjetivo - posMotorActual;
+  if (Math.abs(delta) < 5) { agregarLog('Motor: ya en vuelta ' + objetivo, 'OK'); return; }
+  const cmd = (delta > 0 ? 'D' : 'I') + Math.abs(delta);
+  enviarCmd(cmd, 'Motor: ir a vuelta ' + objetivo + ' → ' + cmd);
 }
 
-// Presets: fraccion 0.0 a 1.0
 function irAPosicion(fraccion) {
   const pasosObj = Math.round(fraccion * PASOS_TOTAL);
   const delta    = pasosObj - posMotorActual;
   if (Math.abs(delta) < 5) { agregarLog('Motor: ya en posicion ' + Math.round(fraccion*100) + '%', 'OK'); return; }
-  const dir = delta > 0 ? 'D' : 'I';
-  const cmd = dir + Math.abs(delta);
-  fetch('/cmd?c=' + cmd).then(() =>
-    agregarLog('Motor preset ' + Math.round(fraccion*100) + '% → ' + cmd, 'CMD'));
+  const cmd = (delta > 0 ? 'D' : 'I') + Math.abs(delta);
+  enviarCmd(cmd, 'Motor preset ' + Math.round(fraccion*100) + '% → ' + cmd);
 }
 
-// Homing: motor va hasta tope (INA219 detecta sobrecorriente) y pone pos=0
 function hacerHoming() {
   if (!confirm('INICIO: el motor avanzara hacia el tope hasta detectar sobrecorriente.\nAsegurate de que el mecanismo no tenga obstaculos.\n¿Continuar?')) return;
-  fetch('/cmd?c=INICIO').then(() => agregarLog('Homing iniciado — buscando tope...', 'CMD'));
+  enviarCmd('INICIO', 'Homing iniciado — buscando tope...', 'WARN');
 }
 
-// Test paso a paso
 function testPaso(dir, pasos) {
   const cmd = dir + pasos;
-  fetch('/cmd?c=' + cmd).then(() => agregarLog('TEST motor: ' + cmd, 'CMD'));
+  enviarCmd(cmd, 'TEST motor: ' + cmd);
+}
+
+function setModo(m) {
+  modo = m;
+  document.getElementById('btnAuto').classList.toggle('active',   m==='auto');
+  document.getElementById('btnManual').classList.toggle('active', m==='manual');
+  document.getElementById('panelAuto').style.display   = m==='auto'   ? 'block' : 'none';
+  document.getElementById('panelManual').style.display = m==='manual' ? 'block' : 'none';
+  document.getElementById('badgeModo').textContent = m==='auto' ? 'AUTO PID' : 'MANUAL';
+  enviarCmd('MODO' + (m==='auto'?'1':'0'), 'Modo cambiado: ' + m.toUpperCase());
+}
+
+function enviarSP(v) {
+  if (parseFloat(v) >= p1Actual) { agregarLog('Setpoint rechazado: supera P1 ('+p1Actual+' PSI)','ERR'); return; }
+  enviarCmd('SET' + v, 'Setpoint enviado: ' + v + ' PSI');
+}
+
+function enviarPID() {
+  const kp=document.getElementById('inKp').value;
+  const ki=document.getElementById('inKi').value;
+  const kd=document.getElementById('inKd').value;
+  enviarCmd('PID'+kp+','+ki+','+kd, 'PID actualizado Kp='+kp+' Ki='+ki+' Kd='+kd);
 }
 
 // ── ACTUALIZAR PANEL MOTOR ───────────────────────────────────────

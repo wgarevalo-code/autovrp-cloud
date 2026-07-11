@@ -124,6 +124,10 @@ let camara1 = {
 // Estado anterior para detectar alertas
 let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0 };
 
+// ── Cola de comandos (dashboard → gateway → nodo via LoRa) ────────
+// El gateway lee comandoPendiente en cada POST /actualizar y lo ejecuta
+let comandoPendiente = null;
+
 // ── Sistema de alarma de inundacion ──────────────────────────────
 let alarmaActiva      = false;   // nivel > 0 actualmente
 let alarmaAcusada     = false;   // alguien presiono "Acuse recibo"
@@ -561,7 +565,14 @@ app.post('/actualizar', (req, res) => {
     registrarEvento('gateway', 'ALERTA_MOVIMIENTO', 'Movimiento detectado');
   }
 
-  res.json({ ok: true });
+  // Devolver comando pendiente al gateway (si hay uno)
+  const respActualizar = { ok: true };
+  if (comandoPendiente) {
+    respActualizar.cmd = comandoPendiente;
+    console.log('CMD enviado al gateway:', comandoPendiente);
+    comandoPendiente = null;
+  }
+  res.json(respActualizar);
 });
 
 // ── API para el dashboard ─────────────────────────────────────────
@@ -578,6 +589,18 @@ app.get('/datos', (req, res) => {
     respuesta.sinDatos = true;
   }
   res.json(respuesta);
+});
+
+// ── Relay de comandos del dashboard al gateway ────────────────────
+// El dashboard llama a GET /cmd?c=COMANDO
+// Railway guarda el comando; el gateway lo lee en el proximo /actualizar
+app.get('/cmd', (req, res) => {
+  const cmd = (req.query.c || '').trim();
+  if (!cmd) return res.status(400).json({ error: 'Sin comando' });
+  comandoPendiente = cmd;
+  console.log('CMD pendiente:', cmd);
+  registrarEvento('dashboard', 'CMD', cmd);
+  res.json({ ok: true, cmd });
 });
 
 // ── Log de eventos del servidor ───────────────────────────────────
