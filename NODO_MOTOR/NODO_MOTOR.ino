@@ -31,14 +31,14 @@ int  velPulso    = 1500;
 int  posicion    = 0;
 bool motorActivo = false;
 
-// ── Transductores de presion (ADC1) ──────────────────────────────
-#define PIN_P1  1    // Aguas arriba
-#define PIN_P2  2    // Aguas abajo
-// Calibracion 4-20mA con resistor 165 ohm (0.66V=0PSI, 3.3V=PSI_MAX)
-// Ajusta PSI_MAX segun rango de tu transductor (ej: 100, 150, 200 PSI)
-#define PSI_MAX     100.0
-#define ADC_4MA     820     // lectura ADC a 4mA  (0.66V / 3.3V * 4095)
-#define ADC_20MA    4095    // lectura ADC a 20mA (3.3V)
+// ── Transductores de presion (voltaje 0.5-4.5V, alim 5V) ─────────
+// Divisor de voltaje R1=1k R2=2.7k en señal: escala 4.5V→3.28V
+// PIN_P1 y PIN_P2 solo aceptan hasta 3.3V — NO conectar directo al sensor
+#define PIN_P1  1    // Aguas arriba  (despues de divisor)
+#define PIN_P2  2    // Aguas abajo   (despues de divisor)
+#define PSI_MAX      100.0
+#define ADC_0PSI     453    // 0.5V * (2.7/3.7) / 3.3V * 4095 = 453
+#define ADC_100PSI   4076   // 4.5V * (2.7/3.7) / 3.3V * 4095 = 4076
 #define NUM_MUESTRAS 10     // promedio para estabilizar lectura
 
 float presionP1 = 0.0;
@@ -101,7 +101,7 @@ float leerPresionPSI(int pin) {
     delayMicroseconds(500);
   }
   float adc = suma / NUM_MUESTRAS;
-  float psi = (adc - ADC_4MA) / (float)(ADC_20MA - ADC_4MA) * PSI_MAX;
+  float psi = (adc - ADC_0PSI) / (float)(ADC_100PSI - ADC_0PSI) * PSI_MAX;
   return constrain(psi, 0.0, PSI_MAX);
 }
 
