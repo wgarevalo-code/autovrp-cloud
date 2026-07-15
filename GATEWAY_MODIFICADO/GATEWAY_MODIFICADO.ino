@@ -292,26 +292,26 @@ void parsearRespuesta(String rxStr) {
     if (idxE < 0) idxE = rxStr.length();
     posicionNodo = rxStr.substring(idxP+2, idxE).toInt();
   }
-  // PSI1 = aguas arriba (P1), PSI2 = aguas abajo (P2)
-  int idxPsi1 = rxStr.indexOf("PSI1:");
+  // P1: = aguas arriba, PSI: = aguas abajo (P2)
+  int idxPsi1 = rxStr.indexOf(" P1:");
   if (idxPsi1 >= 0) {
-    int idxE = rxStr.indexOf(' ', idxPsi1);
+    int idxE = rxStr.indexOf(' ', idxPsi1+1);
     if (idxE < 0) idxE = rxStr.length();
-    presionPSI_P1 = rxStr.substring(idxPsi1+5, idxE).toFloat();
+    presionPSI_P1 = rxStr.substring(idxPsi1+4, idxE).toFloat();
   }
-  int idxPsi2 = rxStr.indexOf("PSI2:");
+  int idxPsi2 = rxStr.indexOf(" PSI:");
   if (idxPsi2 >= 0) {
-    int idxE = rxStr.indexOf(' ', idxPsi2);
+    int idxE = rxStr.indexOf(' ', idxPsi2+1);
     if (idxE < 0) idxE = rxStr.length();
     presionPSI_P2 = rxStr.substring(idxPsi2+5, idxE).toFloat();
     agregarHistorial(presionPSI_P2);
   }
-  // MOD:M = manual fisico activo, MOD:A = auto
-  int idxMod = rxStr.indexOf("MOD:");
+  // MODO:M = manual fisico activo, MODO:A = auto
+  int idxMod = rxStr.indexOf("MODO:");
   if (idxMod >= 0) {
     int idxE = rxStr.indexOf(' ', idxMod);
     if (idxE < 0) idxE = rxStr.length();
-    String mod = rxStr.substring(idxMod+4, idxE);
+    String mod = rxStr.substring(idxMod+5, idxE);
     nodoManual = (mod == "M");
   }
   int idxBoya = rxStr.indexOf("BOYA:");
@@ -345,18 +345,7 @@ void parsearRespuesta(String rxStr) {
     if (idxE < 0) idxE = rxStr.length();
     corrienteMA = rxStr.substring(idxI+3, idxE).toFloat();
   }
-  int idxV = rxStr.indexOf(" V:");
-  if (idxV >= 0) {
-    int idxE = rxStr.indexOf(' ', idxV+1);
-    if (idxE < 0) idxE = rxStr.length();
-    voltajeV = rxStr.substring(idxV+3, idxE).toFloat();
-  }
-  int idxW = rxStr.indexOf(" W:");
-  if (idxW >= 0) {
-    int idxE = rxStr.indexOf(' ', idxW+1);
-    if (idxE < 0) idxE = rxStr.length();
-    potenciaMW = rxStr.substring(idxW+3, idxE).toFloat();
-  }
+  // V: y W: no se envian en v2.0 del nodo
 }
 
 // ── Web server local ──────────────────────────────────────────────

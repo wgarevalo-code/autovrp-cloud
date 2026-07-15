@@ -1,7 +1,6 @@
 // ================================================================
-//  AutoVRP — NODO VALVULA (Heltec WiFi LoRa 32 V3 / ESP32-S3)
-//  NEMA17 + TB6600 + HC-SR04 + DHT11 + INA219 + Transductores P1/P2
-//  Botones fisicos: MANUAL(39) DER(40) IZQ(37)
+//  AutoVRP — NODO COMPLETO v2.0 (Heltec WiFi LoRa 32 V3)
+//  Motor + P1 + P2 + HC-SR04 + DHT11 + INA219 + Botones + LoRa
 // ================================================================
 #include <RadioLib.h>
 #include <Wire.h>
@@ -9,7 +8,7 @@
 #include <DHTesp.h>
 #include <Adafruit_INA219.h>
 
-// ── LoRa ─────────────────────────────────────────────────────────
+// ── LoRa ────────────────────────────────────────────────────────
 #define LORA_CS    8
 #define LORA_DIO1  14
 #define LORA_RST   12
@@ -18,91 +17,88 @@ SX1262 radio = new Module(LORA_CS, LORA_DIO1, LORA_RST, LORA_BUSY);
 volatile bool banderaRX = false;
 bool loraOK = false;
 
-// ── OLED ─────────────────────────────────────────────────────────
+// ── OLED ────────────────────────────────────────────────────────
 SSD1306Wire oled(0x3c, 500000, SDA_OLED, SCL_OLED, GEOMETRY_128_64, RST_OLED);
 
-// ── Motor NEMA17 + TB6600 ─────────────────────────────────────────
-#define PIN_STEP      47
-#define PIN_DIR       48
-#define PASOS_VUELTA  2072
-#define VUELTAS_TOTAL 17
-#define PASOS_BOTON   15      // pasos por toque de boton (ajuste milimetrico)
-int  velPulso    = 1500;
+// ── Motor ───────────────────────────────────────────────────────
+#define PIN_STEP     47
+#define PIN_DIR      48
+#define PASOS_VUELTA 2072
+#define PASOS_TOTAL  35224
+#define PASOS_CLICK  50
+#define VEL_PULSO    1500
 int  posicion    = 0;
 bool motorActivo = false;
 
-// ── Transductores de presion (voltaje 0.5-4.5V, alim 5V) ─────────
-// Divisor de voltaje R1=1k R2=2.7k en señal: escala 4.5V→3.28V
-// PIN_P1 y PIN_P2 solo aceptan hasta 3.3V — NO conectar directo al sensor
-#define PIN_P1  1    // Aguas arriba  (despues de divisor)
-#define PIN_P2  2    // Aguas abajo   (despues de divisor)
-#define PSI_MAX      100.0
-#define ADC_0PSI     453    // 0.5V * (2.7/3.7) / 3.3V * 4095 = 453
-#define ADC_100PSI   4076   // 4.5V * (2.7/3.7) / 3.3V * 4095 = 4076
-#define NUM_MUESTRAS 10     // promedio para estabilizar lectura
-
+// ── Transductor P1 (aguas arriba) GPIO1 ─────────────────────────
+#define PIN_P1          1
+const float ADC_CERRADO_P1 = 627.0;
+const float ADC_ABIERTO_P1 = 1914.0;
+const float PSI_ABIERTO_P1 = 40.0;
+float m_P1 = 0.0;
+float b_P1 = 0.0;
 float presionP1 = 0.0;
+
+// ── Transductor P2 (aguas abajo) GPIO2 ──────────────────────────
+#define PIN_P2          2
+const float PENDIENTE_P2  = 76.7013;
+const float INTERCEPTO_P2 = -30.22;
 float presionP2 = 0.0;
 
-// ── Botones fisicos ───────────────────────────────────────────────
-#define BTN_MANUAL  39
-#define BTN_DER     40
-#define BTN_IZQ     37
-#define DEBOUNCE    300
-unsigned long tsManual = 0, tsDer = 0, tsIzq = 0;
-
-// ── Modo manual/auto ──────────────────────────────────────────────
-bool modoManual = false;
-
-// ── DHT11 ────────────────────────────────────────────────────────
+// ── DHT11 ───────────────────────────────────────────────────────
 #define PIN_DHT 38
 DHTesp dht;
 float temperatura = 0.0;
 float humedad     = 0.0;
 
-// ── INA219 (Wire1: SDA=41, SCL=42) ───────────────────────────────
+// ── INA219 ──────────────────────────────────────────────────────
 TwoWire Wire2 = TwoWire(1);
 Adafruit_INA219 ina219;
-bool  inaOK       = false;
-float corriente_mA = 0.0;
-float voltaje_V    = 0.0;
-float potencia_mW  = 0.0;
-#define CORRIENTE_MAX_MA 2500.0
+bool  inaOK     = false;
+float corriente = 0.0;
+float voltajeINA = 0.0;
+#define CORRIENTE_MAX 2500.0
 
-// ── HC-SR04 + Kill switch ─────────────────────────────────────────
+// ── HC-SR04 + Kill switch ────────────────────────────────────────
 #define TRIG     35
 #define ECHO     33
 #define PIN_RELE 26
 #define DIST_ADVERTENCIA 30
 #define DIST_CRITICO     10
 #define DIST_APAGAR       6
-
 long distancia   = 0;
 int  nivelCodigo = 0;
 
-// ── Timers ────────────────────────────────────────────────────────
-unsigned long ultimoEnvio   = 0;
-unsigned long ultimoDHT     = 0;
-unsigned long ultimoINA     = 0;
-unsigned long ultimoPresion = 0;
-#define INTERVALO_ENVIO   3000
-#define INTERVALO_DHT     5000
-#define INTERVALO_INA      500
-#define INTERVALO_PRESION  200
+// ── Botones ─────────────────────────────────────────────────────
+#define BTN_MANUAL 39
+#define BTN_DER    40
+#define BTN_IZQ    37
+bool estadoAntManual = LOW;
+bool estadoAntDer    = LOW;
+bool estadoAntIzq    = LOW;
+bool modoManual      = false;
+
+// ── Tiempos ─────────────────────────────────────────────────────
+unsigned long ultimoEnvio  = 0;
+unsigned long ultimoDHT    = 0;
+unsigned long ultimoINA    = 0;
+unsigned long ultimoSensor = 0;
+#define INTERVALO_ENVIO  3000
+#define INTERVALO_DHT    5000
+#define INTERVALO_INA     500
+#define INTERVALO_SENSOR  300
 
 void ARDUINO_ISR_ATTR isrRX() { banderaRX = true; }
 
-// ─────────────────────────────────────────────────────────────────
+// ── Funciones ───────────────────────────────────────────────────
 
-float leerPresionPSI(int pin) {
+int leerEstable(int pin, int muestras) {
   long suma = 0;
-  for (int i = 0; i < NUM_MUESTRAS; i++) {
+  for (int i = 0; i < muestras; i++) {
     suma += analogRead(pin);
-    delayMicroseconds(500);
+    delay(3);
   }
-  float adc = suma / NUM_MUESTRAS;
-  float psi = (adc - ADC_0PSI) / (float)(ADC_100PSI - ADC_0PSI) * PSI_MAX;
-  return constrain(psi, 0.0, PSI_MAX);
+  return suma / muestras;
 }
 
 long medirCM() {
@@ -113,6 +109,21 @@ long medirCM() {
   return dur / 58;
 }
 
+void leerTransductores() {
+  // P1 aguas arriba
+  int rawP1  = leerEstable(PIN_P1, 25);
+  presionP1  = (rawP1 * m_P1) + b_P1;
+  if (presionP1 < 0)   presionP1 = 0;
+  if (presionP1 > 100) presionP1 = 100;
+
+  // P2 aguas abajo
+  int   rawP2 = leerEstable(PIN_P2, 25);
+  float vP2   = (rawP2 * 3.3) / 4095.0;
+  presionP2   = (PENDIENTE_P2 * vP2) + INTERCEPTO_P2;
+  if (presionP2 < 0)   presionP2 = 0;
+  if (presionP2 > 175) presionP2 = 175;
+}
+
 void leerDHT() {
   TempAndHumidity th = dht.getTempAndHumidity();
   if (!isnan(th.temperature)) temperatura = th.temperature;
@@ -121,134 +132,121 @@ void leerDHT() {
 
 void leerINA() {
   if (!inaOK) return;
-  voltaje_V    = ina219.getBusVoltage_V();
-  corriente_mA = ina219.getCurrent_mA();
-  potencia_mW  = ina219.getPower_mW();
-  if (corriente_mA < 0) corriente_mA = 0;
+  voltajeINA = ina219.getBusVoltage_V();
+  corriente  = ina219.getCurrent_mA();
+  if (corriente < 0) corriente = 0;
 }
 
-// Mover motor — con proteccion sobrecorriente y kill switch
-bool mover(bool horario, int pasos) {
-  if (nivelCodigo >= 3) return false;
+void dibujarOLED() {
+  oled.clear();
+  oled.setFont(ArialMT_Plain_10);
+
+  if (modoManual) {
+    oled.drawString(0, 0, "=== MODO MANUAL ===");
+    oled.drawLine(0, 11, 128, 11);
+    oled.drawString(0, 13, "P1:" + String(presionP1, 1) + " PSI");
+    oled.drawString(64, 13, "P2:" + String(presionP2, 1) + " PSI");
+    oled.drawString(0, 24, "Pos:" + String(posicion) + " pasos");
+    oled.drawString(0, 35, "I:" + String(corriente, 0) + "mA T:" + String(temperatura, 0) + "C");
+    oled.setFont(ArialMT_Plain_16);
+    oled.drawString(0, 46, motorActivo ? "MOVIENDO..." : "LISTO");
+  } else {
+    oled.drawString(0, 0, "=== NODO AUTOVRP ===");
+    oled.drawLine(0, 11, 128, 11);
+    oled.drawString(0, 13, "P1:" + String(presionP1, 1) + " P2:" + String(presionP2, 1) + " PSI");
+    oled.drawString(0, 24, "Dist:" + String(distancia) + "cm T:" + String(temperatura, 0) + "C");
+    oled.drawString(0, 35, "I:" + String(corriente, 0) + "mA Pos:" + String(posicion));
+    oled.setFont(ArialMT_Plain_16);
+    if      (nivelCodigo == 3) oled.drawString(0, 46, "!! PELIGRO !!");
+    else if (nivelCodigo == 2) oled.drawString(0, 46, "!! CRITICO !!");
+    else if (nivelCodigo == 1) oled.drawString(0, 46, "ADVERTENCIA");
+    else                       oled.drawString(0, 46, "SISTEMA OK");
+  }
+  oled.display();
+}
+
+bool moverPasos(bool horario, int pasos) {
+  if (nivelCodigo >= 3) {
+    Serial.println("BLOQUEADO: nivel agua");
+    return false;
+  }
+  if (horario  && posicion >= PASOS_TOTAL) {
+    Serial.println("LIMITE MAX");
+    return false;
+  }
+  if (!horario && posicion <= 0) {
+    Serial.println("LIMITE MIN");
+    return false;
+  }
+
+  // Validar P2 no supere P1 al cerrar
+  if (horario && presionP2 >= presionP1) {
+    Serial.println("BLOQUEADO: P2 >= P1");
+    oled.clear();
+    oled.setFont(ArialMT_Plain_10);
+    oled.drawString(0, 10, "BLOQUEADO");
+    oled.drawString(0, 25, "P2 no puede >= P1");
+    oled.drawString(0, 40, "P1:" + String(presionP1,1) + " P2:" + String(presionP2,1));
+    oled.display();
+    delay(1500);
+    return false;
+  }
+
   digitalWrite(PIN_DIR, horario ? HIGH : LOW);
   delay(5);
   motorActivo = true;
+
   for (int i = 0; i < pasos; i++) {
-    distancia = medirCM();
-    if (distancia <= DIST_APAGAR) {
-      digitalWrite(PIN_RELE, HIGH); nivelCodigo = 3;
-      motorActivo = false; return false;
-    }
+    if (nivelCodigo >= 3) { motorActivo = false; return false; }
     if (inaOK && i % 50 == 0) {
       leerINA();
-      if (corriente_mA > CORRIENTE_MAX_MA) { motorActivo = false; return false; }
+      if (corriente > CORRIENTE_MAX) {
+        motorActivo = false;
+        Serial.println("STOP sobrecorriente: " + String(corriente, 0) + "mA");
+        return false;
+      }
     }
-    digitalWrite(PIN_STEP, HIGH); delayMicroseconds(velPulso);
-    digitalWrite(PIN_STEP, LOW);  delayMicroseconds(velPulso);
+    digitalWrite(PIN_STEP, HIGH); delayMicroseconds(VEL_PULSO);
+    digitalWrite(PIN_STEP, LOW);  delayMicroseconds(VEL_PULSO);
     posicion += horario ? 1 : -1;
   }
+
   motorActivo = false;
   return true;
 }
 
-// Homing: busca tope por sobrecorriente
-void hacerHoming() {
-  Serial.println("HOMING...");
-  motorActivo = true;
-  digitalWrite(PIN_DIR, LOW); delay(5);
-  for (int i = 0; i < (PASOS_VUELTA * VUELTAS_TOTAL + 500); i++) {
-    if (inaOK && i % 30 == 0) {
-      leerINA();
-      if (corriente_mA > CORRIENTE_MAX_MA) { posicion = 0; motorActivo = false; return; }
-    }
-    digitalWrite(PIN_STEP, HIGH); delayMicroseconds(2000);
-    digitalWrite(PIN_STEP, LOW);  delayMicroseconds(2000);
-  }
-  posicion = 0; motorActivo = false;
-}
-
 void enviarEstado() {
   if (!loraOK) return;
-  String msg = "OK P:"   + String(posicion)       +
-               " PSI1:"  + String(presionP1, 1)   +
-               " PSI2:"  + String(presionP2, 1)   +
-               " BOYA:"  + String(nivelCodigo)    +
-               " DIST:"  + String(distancia)      +
-               " T:"     + String(temperatura, 1) +
-               " H:"     + String(humedad, 1)     +
-               " I:"     + String(corriente_mA, 0)+
-               " V:"     + String(voltaje_V, 2)   +
-               " W:"     + String(potencia_mW, 0) +
-               " MOD:"   + (modoManual ? "M" : "A");
+  String msg = "OK P:"   + String(posicion)      +
+               " PSI:"   + String(presionP2, 1)  +
+               " P1:"    + String(presionP1, 1)  +
+               " BOYA:"  + String(nivelCodigo)   +
+               " DIST:"  + String(distancia)     +
+               " T:"     + String(temperatura,1) +
+               " H:"     + String(humedad,1)     +
+               " I:"     + String(corriente,0)   +
+               " MODO:"  + String(modoManual ? "M":"A");
   radio.transmit(msg);
   Serial.println("TX: " + msg);
   radio.startReceive();
 }
 
-// ── OLED ─────────────────────────────────────────────────────────
-
-void oledAuto() {
-  oled.clear();
-  oled.setFont(ArialMT_Plain_10);
-  oled.drawString(0, 0, "=== NODO AUTOVRP ===");
-  oled.drawLine(0, 11, 128, 11);
-  oled.drawString(0, 13, "P:" + String(posicion) + " T:" + String(temperatura,0) + "C H:" + String(humedad,0) + "%");
-  oled.drawString(0, 23, "Dist:" + String(distancia) + "cm I:" + String(corriente_mA,0) + "mA");
-  // Presiones en grande
-  oled.setFont(ArialMT_Plain_16);
-  oled.drawString(0, 34, "P1:" + String(presionP1,1));
-  oled.drawString(0, 50, "P2:" + String(presionP2,1) + " PSI");
-  oled.display();
-}
-
-void oledManual() {
-  oled.clear();
-  // Encabezado modo manual
-  oled.setFont(ArialMT_Plain_10);
-  oled.drawString(0, 0, ">>> MODO MANUAL <<<");
-  oled.drawLine(0, 11, 128, 11);
-  // Presiones grandes
-  oled.setFont(ArialMT_Plain_16);
-  oled.drawString(0, 14, "P1: " + String(presionP1, 1) + " PSI");
-  oled.drawString(0, 32, "P2: " + String(presionP2, 1) + " PSI");
-  // Barra progreso P2 vs P1
-  oled.setFont(ArialMT_Plain_10);
-  int barW = (presionP1 > 0) ? (int)((presionP2 / presionP1) * 110.0) : 0;
-  barW = constrain(barW, 0, 110);
-  oled.drawRect(0, 52, 112, 8);
-  oled.fillRect(1, 53, barW, 6);
-  oled.drawString(114, 52, String((int)((presionP2/max(presionP1,0.1f))*100)) + "%");
-  oled.display();
-}
-
-// ── COMANDOS ─────────────────────────────────────────────────────
-
 void procesarComando(String cmd) {
   cmd.trim();
   Serial.println("CMD: " + cmd);
-
-  if (cmd == "STOP")   { motorActivo = false; }
-  else if (cmd == "LEER") { enviarEstado(); return; }
-  else if (cmd == "INICIO") { hacerHoming(); }
-  else if (cmd == "MANUAL_ON")  { modoManual = true;  Serial.println("MODO MANUAL"); }
-  else if (cmd == "MANUAL_OFF") { modoManual = false; Serial.println("MODO AUTO"); }
-  else if (cmd == "DER") { if (modoManual) mover(true,  PASOS_BOTON); }
-  else if (cmd == "IZQ") { if (modoManual) mover(false, PASOS_BOTON); }
-  else if (cmd.startsWith("VEL:")) {
-    int v = cmd.substring(4).toInt();
-    if (v >= 300 && v <= 5000) velPulso = v;
+  if (cmd == "STOP")        { motorActivo = false; }
+  else if (cmd == "LEER")   { enviarEstado(); return; }
+  else if (cmd == "MODOM")  { modoManual = true;  }
+  else if (cmd == "MODOA")  { modoManual = false; }
+  else if (cmd.charAt(0) == 'D') {
+    int p = cmd.substring(1).toInt();
+    if (p > 0) moverPasos(true, p);
+  } else if (cmd.charAt(0) == 'I') {
+    int p = cmd.substring(1).toInt();
+    if (p > 0) moverPasos(false, p);
   }
-  else if (cmd.charAt(0) == 'D' && !modoManual) {
-    int p = cmd.substring(1).toInt(); if (p > 0) mover(true,  p);
-  }
-  else if (cmd.charAt(0) == 'I' && !modoManual) {
-    int p = cmd.substring(1).toInt(); if (p > 0) mover(false, p);
-  }
-
   enviarEstado();
 }
-
-// ─────────────────────────────────────────────────────────────────
 
 void setup() {
   Serial.begin(115200);
@@ -261,24 +259,21 @@ void setup() {
   digitalWrite(RST_OLED, HIGH); delay(50);
   oled.init(); oled.flipScreenVertically(); oled.setBrightness(255);
 
+  // ADC — 11dB para rango completo 0-3.3V
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+
+  // Calibración P1
+  m_P1 = PSI_ABIERTO_P1 / (ADC_ABIERTO_P1 - ADC_CERRADO_P1);
+  b_P1 = -1.0 * (m_P1 * ADC_CERRADO_P1);
+
   // Motor
   pinMode(PIN_STEP, OUTPUT); pinMode(PIN_DIR, OUTPUT);
   digitalWrite(PIN_STEP, LOW); digitalWrite(PIN_DIR, LOW);
 
-  // Botones (desactivados temporalmente - pines flotantes)
-  // pinMode(BTN_MANUAL, INPUT);
-  // pinMode(BTN_DER,    INPUT);
-  // pinMode(BTN_IZQ,    INPUT);
-
-  // Kill switch / HC-SR04
+  // Kill switch
   pinMode(TRIG, OUTPUT); pinMode(ECHO, INPUT);
   pinMode(PIN_RELE, OUTPUT); digitalWrite(PIN_RELE, LOW);
-
-  // ADC presion
-  analogReadResolution(12);
-  analogSetAttenuation(ADC_11db);   // rango 0-3.3V
-  pinMode(PIN_P1, INPUT);
-  pinMode(PIN_P2, INPUT);
 
   // DHT11
   dht.setup(PIN_DHT, DHTesp::DHT11);
@@ -289,47 +284,114 @@ void setup() {
     inaOK = true;
     ina219.setCalibration_32V_2A();
     Serial.println("INA219 OK");
+  } else {
+    Serial.println("INA219 NO encontrado");
   }
+
+  // Botones con pulldown interno — no flotan
+  pinMode(BTN_MANUAL, INPUT_PULLDOWN);
+  pinMode(BTN_DER,    INPUT_PULLDOWN);
+  pinMode(BTN_IZQ,    INPUT_PULLDOWN);
 
   // LoRa
   int r = radio.begin(915.0, 125.0, 9, 7, 0xAB, 10, 8);
-  if (r == RADIOLIB_ERR_NONE) {
+  if (r != RADIOLIB_ERR_NONE) {
+    Serial.println("LoRa FALLO: " + String(r));
+  } else {
     loraOK = true;
     radio.setDio1Action(isrRX);
     radio.startReceive();
     Serial.println("LoRa OK");
   }
 
-  Serial.println("=== Nodo listo ===");
-  oledAuto();
+  Serial.println("=== Nodo AutoVRP v2.0 listo ===");
+  dibujarOLED();
 }
 
 void loop() {
   unsigned long ahora = millis();
 
-  // ── Sensores periodicos ──────────────────────────────────────
-  if (ahora - ultimoPresion >= INTERVALO_PRESION) {
-    ultimoPresion = ahora;
-    presionP1 = leerPresionPSI(PIN_P1);
-    presionP2 = leerPresionPSI(PIN_P2);
+  // ── Botones ──────────────────────────────────────────────────
+  bool manualActual = digitalRead(BTN_MANUAL);
+  bool derActual    = digitalRead(BTN_DER);
+  bool izqActual    = digitalRead(BTN_IZQ);
+
+  if (manualActual == HIGH && estadoAntManual == LOW) {
+    modoManual = !modoManual;
+    Serial.println(modoManual ? "MODO MANUAL ON" : "MODO AUTO ON");
+    enviarEstado();
+    dibujarOLED();
   }
-  if (ahora - ultimoDHT >= INTERVALO_DHT) { ultimoDHT = ahora; leerDHT(); }
-  if (ahora - ultimoINA >= INTERVALO_INA)  { ultimoINA = ahora; leerINA(); }
 
-  // ── Kill switch agua ─────────────────────────────────────────
-  distancia = medirCM();
-  if      (distancia <= DIST_APAGAR)      { nivelCodigo = 3; digitalWrite(PIN_RELE, HIGH); }
-  else if (distancia <= DIST_CRITICO)     { nivelCodigo = 2; digitalWrite(PIN_RELE, LOW); }
-  else if (distancia <= DIST_ADVERTENCIA) { nivelCodigo = 1; digitalWrite(PIN_RELE, LOW); }
-  else                                    { nivelCodigo = 0; digitalWrite(PIN_RELE, LOW); }
+  if (derActual == HIGH && estadoAntDer == LOW) {
+    if (modoManual) {
+      Serial.println(">>> DER");
+      moverPasos(true, PASOS_CLICK);
+      enviarEstado();
+      dibujarOLED();
+    } else {
+      oled.clear();
+      oled.setFont(ArialMT_Plain_16);
+      oled.drawString(0, 10, "BLOQUEADO");
+      oled.drawString(0, 30, "Activa MANUAL");
+      oled.display();
+      delay(1000);
+      dibujarOLED();
+    }
+  }
 
-  // ── Envio LoRa periodico ─────────────────────────────────────
+  if (izqActual == HIGH && estadoAntIzq == LOW) {
+    if (modoManual) {
+      Serial.println("<<< IZQ");
+      moverPasos(false, PASOS_CLICK);
+      enviarEstado();
+      dibujarOLED();
+    } else {
+      oled.clear();
+      oled.setFont(ArialMT_Plain_16);
+      oled.drawString(0, 10, "BLOQUEADO");
+      oled.drawString(0, 30, "Activa MANUAL");
+      oled.display();
+      delay(1000);
+      dibujarOLED();
+    }
+  }
+
+  estadoAntManual = manualActual;
+  estadoAntDer    = derActual;
+  estadoAntIzq    = izqActual;
+
+  // ── Sensores periódicos ───────────────────────────────────────
+  if (ahora - ultimoSensor >= INTERVALO_SENSOR) {
+    ultimoSensor = ahora;
+    leerTransductores();
+    distancia = medirCM();
+
+    if      (distancia <= DIST_APAGAR)      { nivelCodigo = 3; digitalWrite(PIN_RELE, HIGH); }
+    else if (distancia <= DIST_CRITICO)     { nivelCodigo = 2; digitalWrite(PIN_RELE, LOW);  }
+    else if (distancia <= DIST_ADVERTENCIA) { nivelCodigo = 1; digitalWrite(PIN_RELE, LOW);  }
+    else                                    { nivelCodigo = 0; digitalWrite(PIN_RELE, LOW);  }
+
+    dibujarOLED();
+  }
+
+  if (ahora - ultimoDHT >= INTERVALO_DHT) {
+    ultimoDHT = ahora;
+    leerDHT();
+  }
+
+  if (ahora - ultimoINA >= INTERVALO_INA) {
+    ultimoINA = ahora;
+    leerINA();
+  }
+
+  // ── Enviar estado ─────────────────────────────────────────────
   if (loraOK && ahora - ultimoEnvio >= INTERVALO_ENVIO) {
     ultimoEnvio = ahora;
     enviarEstado();
   }
 
-  // ── Recibir comandos ─────────────────────────────────────────
+  // ── Recibir LoRa ─────────────────────────────────────────────
   if (loraOK && banderaRX) {
     banderaRX = false;
     String rxStr;
@@ -341,10 +403,4 @@ void loop() {
       radio.startReceive();
     }
   }
-
-  // ── OLED según modo ──────────────────────────────────────────
-  if (modoManual) oledManual();
-  else            oledAuto();
-
-  delay(100);
 }
