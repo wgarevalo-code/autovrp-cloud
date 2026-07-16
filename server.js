@@ -118,6 +118,7 @@ let camara1 = {
   corrienteMA:  0.0,
   voltajeV:     0.0,
   potenciaMW:   0.0,
+  nodoManual:   false,
   ultimaActualizacion: null
 };
 

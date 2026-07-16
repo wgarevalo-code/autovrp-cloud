@@ -808,140 +808,176 @@ function toggleLuz() {
 // ── ACTUALIZAR ───────────────────────────────────────────────────
 let prevP2 = null;
 let ciclo = 0;
+let prevDatos = null;   // para evitar re-dibujar cuando no cambiaron los datos
+
+function setTxt(id, val) {
+  const el = document.getElementById(id);
+  if (el && el.textContent !== String(val)) el.textContent = val;
+}
+function setAttr(el, attr, val) {
+  if (el && el.getAttribute(attr) !== String(val)) el.setAttribute(attr, val);
+}
+function setStyle(el, prop, val) {
+  if (el && el.style[prop] !== String(val)) el.style[prop] = val;
+}
+function setClass(el, cls, on) {
+  if (!el) return;
+  if (on && !el.classList.contains(cls)) el.classList.add(cls);
+  if (!on && el.classList.contains(cls)) el.classList.remove(cls);
+}
 
 function actualizar() {
   fetch('/datos', { cache: 'no-store' }).then(r=>r.json()).then(d=>{
 
-    p1Actual = d.presionP1;
+    const p1  = d.presionP1  || 0;
+    const p2  = d.presionP2  || 0;
+    const hum = d.humedad    || 0;
+    const tmp = d.temperatura|| 0;
+    p1Actual  = p1;
 
-    // P1
-    document.getElementById('valP1').textContent = d.presionP1.toFixed(1);
-    document.getElementById('mpaP1').textContent = (d.presionP1/145.038).toFixed(3)+' MPa';
-    let f1 = Math.min(1, d.presionP1/175);
-    document.getElementById('arcP1').setAttribute('stroke-dashoffset', 251-f1*251);
-    document.getElementById('needleP1').setAttribute('transform','rotate('+(-90+f1*180)+' 100 100)');
-    document.getElementById('barP1').style.width = (f1*100)+'%';
+    // Solo redibujar gauges si el valor cambio (evita titilar transiciones SVG)
+    const f1  = Math.min(1, p1/175);
+    const f2  = Math.min(1, p2/175);
+    setTxt('valP1', p1.toFixed(1));
+    setTxt('mpaP1', (p1/145.038).toFixed(3)+' MPa');
+    setAttr(document.getElementById('arcP1'),    'stroke-dashoffset', (251-f1*251).toFixed(2));
+    setAttr(document.getElementById('needleP1'), 'transform', 'rotate('+(-90+f1*180).toFixed(2)+' 100 100)');
+    setStyle(document.getElementById('barP1'),   'width', (f1*100).toFixed(1)+'%');
 
-    // P2
-    document.getElementById('valP2').textContent = d.presionP2.toFixed(1);
-    document.getElementById('mpaP2').textContent = (d.presionP2/145.038).toFixed(3)+' MPa';
-    let f2 = Math.min(1, d.presionP2/175);
-    document.getElementById('arcP2').setAttribute('stroke-dashoffset', 251-f2*251);
-    document.getElementById('needleP2').setAttribute('transform','rotate('+(-90+f2*180)+' 100 100)');
-    document.getElementById('barP2').style.width = (f2*100)+'%';
-    document.getElementById('manPsi').textContent = d.presionP2.toFixed(1);
-    document.getElementById('volFill').style.width = Math.min(100,(d.presionP2/Math.max(1,d.presionP1))*100)+'%';
+    setTxt('valP2', p2.toFixed(1));
+    setTxt('mpaP2', (p2/145.038).toFixed(3)+' MPa');
+    setAttr(document.getElementById('arcP2'),    'stroke-dashoffset', (251-f2*251).toFixed(2));
+    setAttr(document.getElementById('needleP2'), 'transform', 'rotate('+(-90+f2*180).toFixed(2)+' 100 100)');
+    setStyle(document.getElementById('barP2'),   'width', (f2*100).toFixed(1)+'%');
+    setTxt('manPsi', p2.toFixed(1));
+    setStyle(document.getElementById('volFill'), 'width', Math.min(100,(p2/Math.max(1,p1))*100).toFixed(1)+'%');
 
     // Setpoint
-    document.getElementById('maxPermit').textContent = Math.floor(d.presionP1-1);
-    document.getElementById('sliderSP').max = Math.floor(d.presionP1-1);
+    setTxt('maxPermit', Math.floor(p1-1));
+    document.getElementById('sliderSP').max = Math.floor(p1-1);
 
     // Progreso PID
-    let diff = Math.abs(d.presionP2 - spLocal_val);
-    let pct  = Math.max(0, 100-(diff/Math.max(1,spLocal_val))*100);
-    let pf = document.getElementById('progFill');
-    pf.style.width = Math.min(100,pct)+'%';
-    pf.style.background = diff<1.5 ? '#00e5a0' : diff<5 ? '#ffc030' : '#ff4444';
-    document.getElementById('progTxt').textContent = d.presionP2.toFixed(1)+' / '+spLocal_val+' PSI';
+    const diff = Math.abs(p2 - spLocal_val);
+    const pct  = Math.max(0, 100-(diff/Math.max(1,spLocal_val))*100);
+    const pf   = document.getElementById('progFill');
+    const pfBg = diff<1.5 ? '#00e5a0' : diff<5 ? '#ffc030' : '#ff4444';
+    setStyle(pf, 'width',      Math.min(100,pct).toFixed(1)+'%');
+    setStyle(pf, 'background', pfBg);
+    setTxt('progTxt', p2.toFixed(1)+' / '+spLocal_val+' PSI');
 
     // Estado PID
-    let estEl = document.getElementById('estadoPID');
-    if (d.modoAuto) {
-      if (d.estado==='EN SETPOINT') { estEl.textContent='EN SETPOINT — PRESION ESTABLE'; estEl.style.color='#00e5a0'; }
-      else if (d.estado==='ESTABILIZANDO') { estEl.textContent='ESTABILIZANDO...'; estEl.style.color='#ffc030'; }
-      else { estEl.textContent='PID ACTIVO — '+d.estado; estEl.style.color='#3a9aff'; }
-    } else { estEl.textContent='MODO MANUAL ACTIVO'; estEl.style.color='var(--text2)'; }
+    const estEl  = document.getElementById('estadoPID');
+    const estTxt = d.modoAuto
+      ? (d.estado==='EN SETPOINT' ? 'EN SETPOINT — PRESION ESTABLE'
+        : d.estado==='ESTABILIZANDO' ? 'ESTABILIZANDO...'
+        : 'PID ACTIVO — '+(d.estado||''))
+      : 'MODO MANUAL ACTIVO';
+    const estClr = d.modoAuto
+      ? (d.estado==='EN SETPOINT' ? '#00e5a0' : d.estado==='ESTABILIZANDO' ? '#ffc030' : '#3a9aff')
+      : 'var(--text2)';
+    setTxt(estEl.id, estTxt);
+    setStyle(estEl, 'color', estClr);
 
     // Valvula
-    let pct2 = Math.min(100,Math.max(0,Math.round((Math.abs(d.pasos)/400)*100)));
-    document.getElementById('valPasos').textContent = d.pasos+' pasos';
-    document.getElementById('valGrados').textContent = d.grados.toFixed(1)+' grados';
-    document.getElementById('valvePct').textContent = pct2+'%';
-    document.getElementById('badgeValv').textContent = pct2+'%';
-    document.getElementById('valveFill').setAttribute('width', (pct2/100)*140);
-    document.getElementById('valvePos').setAttribute('x', 30+(pct2/100)*140);
+    const pct2 = Math.min(100, Math.max(0, Math.round((Math.abs(d.pasos||0)/400)*100)));
+    setTxt('valPasos',  (d.pasos||0)+' pasos');
+    setTxt('valGrados', (d.grados||0).toFixed(1)+' grados');
+    setTxt('valvePct',  pct2+'%');
+    setTxt('badgeValv', pct2+'%');
+    setAttr(document.getElementById('valveFill'), 'width', (pct2/100)*140);
+    setAttr(document.getElementById('valvePos'),  'x',     30+(pct2/100)*140);
 
     // Humedad
-    document.getElementById('humVal').textContent = d.humedad.toFixed(0)+'%';
-    document.getElementById('humEst').textContent = d.humedad>85?'ALTA':d.humedad>60?'Normal':'Seca';
-    document.getElementById('humEst').style.color = d.humedad>85?'#ff4444':'#00e5a0';
+    setTxt('humVal', hum.toFixed(0)+'%');
+    setTxt('humEst', hum>85?'ALTA':hum>60?'Normal':'Seca');
+    setStyle(document.getElementById('humEst'), 'color', hum>85?'#ff4444':'#00e5a0');
 
     // Temperatura
-    document.getElementById('tempVal').textContent = d.temperatura.toFixed(1)+' °C';
-    document.getElementById('tempEst').textContent = d.temperatura>35?'ALTA':d.temperatura>0?'Normal':'--';
-    document.getElementById('tempEst').style.color = d.temperatura>35?'#ffc030':'#a060ff';
+    setTxt('tempVal', tmp.toFixed(1)+' °C');
+    setTxt('tempEst', tmp>35?'ALTA':tmp>0?'Normal':'--');
+    setStyle(document.getElementById('tempEst'), 'color', tmp>35?'#ffc030':'#a060ff');
 
     // Boya / inundacion
     const nivel = d.nivelInundacion || 0;
     const dist  = d.distanciaCM    || 0;
-    const nivelTextos = ['CAMARA SECA','ADVERTENCIA','NIVEL CRITICO','!! PELIGRO !!'];
-    const nivelColores= ['#00e5a0','#ffc030','#ff4444','#ff0000'];
-    document.getElementById('boyaVal').textContent = nivel===0?'Seca': nivelTextos[nivel];
-    document.getElementById('boyaEst').textContent = nivel===0?'Sin inundacion': `Dist: ${dist} cm`;
-    document.getElementById('boyaVal').style.color  = nivelColores[nivel]||'#ff0000';
-    document.getElementById('boyaEst').style.color  = nivelColores[nivel]||'#ff0000';
-    document.getElementById('iconBoya').style.background = nivel===0?'#001428':'#200000';
+    const nivelTextos  = ['CAMARA SECA','ADVERTENCIA','NIVEL CRITICO','!! PELIGRO !!'];
+    const nivelColores = ['#00e5a0','#ffc030','#ff4444','#ff0000'];
+    const nColor = nivelColores[nivel] || '#ff0000';
+    setTxt('boyaVal', nivel===0 ? 'Seca' : nivelTextos[nivel]);
+    setTxt('boyaEst', nivel===0 ? 'Sin inundacion' : 'Dist: '+dist+' cm');
+    setStyle(document.getElementById('boyaVal'),  'color',      nColor);
+    setStyle(document.getElementById('boyaEst'),  'color',      nColor);
+    setStyle(document.getElementById('iconBoya'), 'background', nivel===0?'#001428':'#200000');
     actualizarOverlayInundacion(nivel, dist);
 
     // Luz / movimiento
-    const luzOn = d.luzEncendida;
-    document.getElementById('luzVal').textContent = luzOn?'Encendida':'Apagada';
-    document.getElementById('luzVal').style.color = luzOn?'#ffc030':'var(--text2)';
-    document.getElementById('iconLuz').style.background = luzOn?'#201000':'#201400';
-    document.getElementById('movVal').textContent = d.movimiento?'!! Movimiento detectado !!':'Sin movimiento';
-    document.getElementById('movVal').style.color = d.movimiento?'#ff4444':'var(--text3)';
-    document.getElementById('alertaPanel').classList.toggle('show', d.movimiento);
+    const luzOn = !!d.luzEncendida;
+    setTxt('luzVal', luzOn?'Encendida':'Apagada');
+    setStyle(document.getElementById('luzVal'),  'color',      luzOn?'#ffc030':'var(--text2)');
+    setStyle(document.getElementById('iconLuz'), 'background', luzOn?'#201000':'#201400');
+    setTxt('movVal', d.movimiento?'!! Movimiento detectado !!':'Sin movimiento');
+    setStyle(document.getElementById('movVal'),  'color', d.movimiento?'#ff4444':'var(--text3)');
+    setClass(document.getElementById('alertaPanel'), 'show', !!d.movimiento);
 
     // LoRa
-    document.getElementById('rssiTxt').textContent = d.rssi+' dBm';
-    document.getElementById('snrTxt').textContent  = d.snr+' dB';
-    document.getElementById('loraEst').textContent = d.rssi!==0?'CONECTADO':'SIN NODO';
-    document.getElementById('loraEst').style.color = d.rssi!==0?'#00e5a0':'#ff4444';
-    document.getElementById('calidadTxt').textContent = d.calidad;
-    document.querySelectorAll('#sigBars .sig-bar').forEach((b,i)=>b.classList.toggle('on',i<d.barras));
+    setTxt('rssiTxt',    (d.rssi||0)+' dBm');
+    setTxt('snrTxt',     (d.snr||0)+' dB');
+    setTxt('loraEst',    d.rssi?'CONECTADO':'SIN NODO');
+    setStyle(document.getElementById('loraEst'), 'color', d.rssi?'#00e5a0':'#ff4444');
+    setTxt('calidadTxt', d.calidad||'--');
+    document.querySelectorAll('#sigBars .sig-bar').forEach((b,i)=>setClass(b,'on',i<(d.barras||0)));
 
     if (d.ultimaActualizacion) {
-      const f = new Date(d.ultimaActualizacion);
-      document.getElementById('ultimaActTxt').textContent = f.toLocaleTimeString('es-EC');
+      setTxt('ultimaActTxt', new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC'));
     }
 
     // Status pill
     const pill = document.getElementById('statusPill');
     const dot  = document.getElementById('statusDot');
-    const txt  = document.getElementById('statusTxt');
-    if (d.boyaMojada) {
-      pill.className='pill pill-red'; dot.className='dot dot-red'; txt.textContent='ALERTA INUNDACION';
-    } else if (d.rssi===0) {
-      pill.className='pill pill-yellow'; dot.className='dot dot-yellow'; txt.textContent='Sin enlace LoRa';
-    } else {
-      pill.className='pill pill-green'; dot.className='dot dot-green'; txt.textContent='Sistema en linea';
-    }
+    const sttxt= document.getElementById('statusTxt');
+    const [pillCls, dotCls, pillTxt] = d.boyaMojada
+      ? ['pill pill-red',   'dot dot-red',   'ALERTA INUNDACION']
+      : d.rssi===0
+      ? ['pill pill-yellow','dot dot-yellow','Sin enlace LoRa']
+      : ['pill pill-green', 'dot dot-green', 'Sistema en linea'];
+    if (pill.className  !== pillCls) pill.className  = pillCls;
+    if (dot.className   !== dotCls)  dot.className   = dotCls;
+    setTxt(sttxt.id, pillTxt);
 
-    // Grafica y tabla cada 5 ciclos (~10s)
+    // Grafica y tabla cada 5 ciclos (~12.5s con intervalo 2.5s)
     ciclo++;
     if (ciclo % 5 === 0) {
-      agregarPuntoChart(d.presionP1, d.presionP2, spLocal_val);
-      agregarFilaTabla(d.presionP1, d.presionP2, d.estado);
+      agregarPuntoChart(p1, p2, spLocal_val);
+      agregarFilaTabla(p1, p2, d.estado);
     }
 
     // Log cuando P2 cambia significativamente
-    if (prevP2 !== null && Math.abs(d.presionP2 - prevP2) > 0.5) {
-      const tipo = d.presionP2 < spLocal_val - 3 ? 'WARN' : 'OK';
-      agregarLog('P2 cambio: '+prevP2.toFixed(1)+' → '+d.presionP2.toFixed(1)+' PSI | Estado: '+d.estado, tipo);
+    if (prevP2 !== null && Math.abs(p2 - prevP2) > 0.5) {
+      agregarLog('P2 cambio: '+prevP2.toFixed(1)+' → '+p2.toFixed(1)+' PSI | Estado: '+(d.estado||''), p2 < spLocal_val-3 ? 'WARN':'OK');
     }
-    prevP2 = d.presionP2;
+    prevP2 = p2;
 
-    // Modo manual fisico
-    const banner = document.getElementById('bannerManual');
+    // Modo manual fisico — sin cssText (provoca flash al resetear todas las propiedades)
+    const banner  = document.getElementById('bannerManual');
+    const badgeMo = document.getElementById('badgeModo');
     if (d.nodoManual) {
-      banner.style.display = 'flex';
-      document.getElementById('badgeModo').textContent = 'MANUAL FISICO';
-      document.getElementById('badgeModo').style.cssText = 'background:#201000;color:#ffc030;border:1px solid #604000';
+      setStyle(banner,  'display', 'flex');
+      setTxt(badgeMo.id, 'MANUAL FISICO');
+      setStyle(badgeMo, 'background', '#201000');
+      setStyle(badgeMo, 'color',      '#ffc030');
+      setStyle(badgeMo, 'border',     '1px solid #604000');
     } else {
-      banner.style.display = 'none';
+      setStyle(banner, 'display', 'none');
       if (!d.modoAuto) {
-        document.getElementById('badgeModo').textContent = 'MANUAL';
-        document.getElementById('badgeModo').style.cssText = 'background:#001428;color:#3a9aff;border:1px solid #003060';
+        setTxt(badgeMo.id, 'MANUAL');
+        setStyle(badgeMo, 'background', '#001428');
+        setStyle(badgeMo, 'color',      '#3a9aff');
+        setStyle(badgeMo, 'border',     '1px solid #003060');
+      } else {
+        setTxt(badgeMo.id, 'AUTO PID');
+        setStyle(badgeMo, 'background', '#001e0a');
+        setStyle(badgeMo, 'color',      '#00e5a0');
+        setStyle(badgeMo, 'border',     '1px solid #00603a');
       }
     }
 
@@ -1177,7 +1213,7 @@ function actualizarMotor(d) {
 agregarLog('Dashboard AutoVRP iniciado','SYS');
 agregarLog('Conectando con servidor Railway...','SYS');
 
-setInterval(actualizar, 1000);
+setInterval(actualizar, 2500);
 actualizar();
 </script>
 </body>
