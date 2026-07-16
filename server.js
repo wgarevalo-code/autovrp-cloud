@@ -123,7 +123,7 @@ let camara1 = {
 };
 
 // Estado anterior para detectar alertas
-let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0 };
+let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0, rssi: 0, enSetpoint: false };
 
 // ── Cola de comandos (dashboard → gateway → nodo via LoRa) ────────
 // El gateway lee comandoPendiente en cada POST /actualizar y lo ejecuta
@@ -578,6 +578,26 @@ app.post('/actualizar', (req, res) => {
     registrarEvento('nodo', 'MODO_AUTO', 'Sistema vuelve a control automatico');
   }
   estadoAnterior.nodoManual = camara1.nodoManual || false;
+
+  // Notificar conexion / desconexion LoRa
+  const rssiActual = camara1.rssi || 0;
+  if (estadoAnterior.rssi === 0 && rssiActual !== 0) {
+    tgAlerta(`📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`);
+    registrarEvento('gateway', 'LORA_CONECTADO', `RSSI: ${rssiActual} dBm`);
+  }
+  if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
+    tgAlerta(`📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
+  }
+  estadoAnterior.rssi = rssiActual;
+
+  // Notificar cuando PID alcanza el setpoint (flanco: no estaba → si esta)
+  const enSetpointAhora = camara1.modoAuto && camara1.estado === 'EN SETPOINT';
+  if (!estadoAnterior.enSetpoint && enSetpointAhora) {
+    tgAlerta(`✅ <b>Presion estabilizada — Camara 1</b>\nSetpoint alcanzado: <b>${camara1.setpoint?.toFixed(1)} PSI</b>\nP2 actual: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    registrarEvento('gateway', 'SETPOINT_ALCANZADO', `P2: ${camara1.presionP2?.toFixed(1)} PSI | SP: ${camara1.setpoint?.toFixed(1)} PSI`);
+  }
+  estadoAnterior.enSetpoint = enSetpointAhora;
 
   // Notificar cambio significativo de presion P2 (> 2 PSI)
   const p2Actual = camara1.presionP2 || 0;
