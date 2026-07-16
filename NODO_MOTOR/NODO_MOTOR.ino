@@ -63,9 +63,9 @@ float voltajeINA = 0.0;
 #define TRIG     35
 #define ECHO     33
 #define PIN_RELE 26
-#define DIST_ADVERTENCIA 30
-#define DIST_CRITICO     10
-#define DIST_APAGAR       6
+#define DIST_ADVERTENCIA 150
+#define DIST_CRITICO      50
+#define DIST_APAGAR       20
 long distancia   = 0;
 int  nivelCodigo = 0;
 
