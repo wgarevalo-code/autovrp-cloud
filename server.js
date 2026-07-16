@@ -622,7 +622,7 @@ app.post('/actualizar', (req, res) => {
 app.get('/datos', (req, res) => {
   // Si no llegan datos hace más de 15s, mostrar como desconectado
   const sinDatos = !camara1.ultimaActualizacion ||
-    (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 15000;
+    (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 30000;
   const respuesta = { ...camara1, historial: camara1.historial };
   if (sinDatos) {
     respuesta.rssi    = 0;

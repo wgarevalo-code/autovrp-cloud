@@ -72,11 +72,11 @@ unsigned long ultimaLectura = 0;
 
 // ── Envio a nube ─────────────────────────────────────────────────
 unsigned long ultimoEnvioNube = 0;
-#define INTERVALO_NUBE 3500   // envia cada 3.5s (mayor que INTERVALO_LEER)
+#define INTERVALO_NUBE 4000   // envia cada 4s
 
 // ── Poll rapido de comandos ───────────────────────────────────────
 unsigned long ultimoCheckCmd = 0;
-#define INTERVALO_CMD 500     // consulta Railway por comandos cada 500ms
+#define INTERVALO_CMD 2500    // consulta Railway por comandos cada 2.5s
 
 bool esperandoRespuesta = false;
 unsigned long tiempoEnvio = 0;
@@ -89,7 +89,7 @@ void checkCmdNube() {
   if (!wifiConectado) return;
   HTTPClient http;
   http.begin(URL_CMD_POLL);
-  http.setTimeout(800);
+  http.setTimeout(500);
   int code = http.GET();
   if (code == 200) {
     String resp = http.getString();
@@ -169,7 +169,7 @@ void enviarANube() {
 
   HTTPClient http;
   http.begin(URL_NUBE);
-  http.setTimeout(1500);
+  http.setTimeout(3000);
   http.addHeader("Content-Type", "application/json");
   int code = http.POST(json);
 
