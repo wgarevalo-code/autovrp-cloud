@@ -215,6 +215,15 @@ let camara1 = {
 // Estado anterior para detectar alertas
 let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0, rssi: 0, enSetpoint: false };
 
+// Cooldown para alertas repetitivas (ms)
+const alertaCooldown = {};
+function alertaConCooldown(clave, texto, minutos) {
+  const ahora = Date.now();
+  if (alertaCooldown[clave] && ahora - alertaCooldown[clave] < minutos * 60000) return;
+  alertaCooldown[clave] = ahora;
+  alerta(texto);
+}
+
 // ── Cola de comandos (dashboard → gateway → nodo via LoRa) ────────
 // El gateway lee comandoPendiente en cada POST /actualizar y lo ejecuta
 let comandoPendiente = null;
@@ -701,11 +710,11 @@ app.post('/actualizar', (req, res) => {
   // Notificar conexion / desconexion LoRa
   const rssiActual = camara1.rssi || 0;
   if (estadoAnterior.rssi === 0 && rssiActual !== 0) {
-    alerta(`📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`);
+    alertaConCooldown('lora_online', `📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`, 5);
     registrarEvento('gateway', 'LORA_CONECTADO', `RSSI: ${rssiActual} dBm`);
   }
   if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
-    alerta(`📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 5);
     registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
   }
   estadoAnterior.rssi = rssiActual;
