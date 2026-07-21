@@ -597,7 +597,7 @@ function procesarComando(chatId, texto, req) {
         } else {
           camara1.setpoint = sp;
           tgEnviar(chatId, `✅ <b>Setpoint actualizado a ${sp} PSI</b>`);
-          alerta(`ℹ️ Setpoint cambiado a <b>${sp} PSI</b> por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
+          registrarEvento(usuarios.get(chatId)?.nombre, 'SETPOINT', `${sp} PSI`);
         }
       } else if (rol === 'pending') {
         tgEnviar(chatId, `⛔ <b>Acceso pendiente de autorizacion.</b>\nEl administrador del sistema debe autorizarte.\nTu Chat ID es: <code>${chatId}</code>\n\nComparte este ID con el administrador.`);
@@ -710,31 +710,23 @@ app.post('/actualizar', (req, res) => {
   // Notificar conexion / desconexion LoRa
   const rssiActual = camara1.rssi || 0;
   if (estadoAnterior.rssi === 0 && rssiActual !== 0) {
-    alertaConCooldown('lora_online', `📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`, 5);
+    alertaConCooldown('lora_online', `📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`, 2);
     registrarEvento('gateway', 'LORA_CONECTADO', `RSSI: ${rssiActual} dBm`);
   }
   if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
-    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 5);
+    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 2);
     registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
   }
   estadoAnterior.rssi = rssiActual;
 
-  // Notificar cuando PID alcanza el setpoint (flanco: no estaba → si esta)
-  const enSetpointAhora = camara1.modoAuto && camara1.estado === 'EN SETPOINT';
-  if (!estadoAnterior.enSetpoint && enSetpointAhora) {
-    alerta(`✅ <b>Presion estabilizada — Camara 1</b>\nSetpoint alcanzado: <b>${camara1.setpoint?.toFixed(1)} PSI</b>\nP2 actual: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
-    registrarEvento('gateway', 'SETPOINT_ALCANZADO', `P2: ${camara1.presionP2?.toFixed(1)} PSI | SP: ${camara1.setpoint?.toFixed(1)} PSI`);
-  }
-  estadoAnterior.enSetpoint = enSetpointAhora;
-
-  // Notificar cambio significativo de presion P2 (> 2 PSI)
+  // Notificar caida brusca de presion P2 (> 10 PSI en un ciclo = rotura/fuga)
   const p2Actual = camara1.presionP2 || 0;
-  if (Math.abs(p2Actual - estadoAnterior.presionP2) >= 2.0 && p2Actual > 0) {
-    const dir = p2Actual > estadoAnterior.presionP2 ? '⬆️' : '⬇️';
-    alerta(`${dir} <b>Presion P2 ajustada — Camara 1</b>\nAnterior: ${estadoAnterior.presionP2.toFixed(1)} PSI → Actual: ${p2Actual.toFixed(1)} PSI\nSetpoint: ${camara1.setpoint?.toFixed(1)} PSI\n🕐 ${hora}`);
-    estadoAnterior.presionP2 = p2Actual;
-    registrarEvento('gateway', 'CAMBIO_PRESION', `P2: ${estadoAnterior.presionP2.toFixed(1)}→${p2Actual.toFixed(1)} PSI`);
+  const p2Anterior = estadoAnterior.presionP2 || 0;
+  if (p2Anterior > 5 && (p2Anterior - p2Actual) >= 10) {
+    alertaConCooldown('caida_presion', `⚠️ <b>CAIDA BRUSCA DE PRESION — Camara 1</b>\nP2: ${p2Anterior.toFixed(1)} PSI → ${p2Actual.toFixed(1)} PSI\nPosible fuga o apertura de valvula.\n🕐 ${hora}`, 2);
+    registrarEvento('gateway', 'CAIDA_PRESION', `P2: ${p2Anterior.toFixed(1)}→${p2Actual.toFixed(1)} PSI`);
   }
+  estadoAnterior.presionP2 = p2Actual;
 
   // Guardar en historial (max 1 vez/min)
   registrarHistorial('camara1', camara1.presionP1, camara1.presionP2, camara1.setpoint, camara1.estado);
