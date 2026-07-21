@@ -2,16 +2,68 @@
 //  AutoVRP — Servidor en la nube
 //  Railway — Node.js + Bot Telegram
 // ================================================================
-const express = require('express');
-const https   = require('https');
-const fs      = require('fs');
-const path    = require('path');
-const app     = express();
+const express  = require('express');
+const https    = require('https');
+const fs       = require('fs');
+const path     = require('path');
+const crypto   = require('crypto');
+const app      = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ── Utilidad hash ─────────────────────────────────────────────────
+function sha256(str) {
+  return crypto.createHash('sha256').update(str).digest('hex');
+}
+
+// ── Usuarios web del dashboard (rol: admin | empleado) ────────────
+// Cambiar contrasenas antes de produccion
+const webUsers = {
+  'admin':   { password: sha256('autovrp2024'), rol: 'admin',    nombre: 'Administrador' },
+  'tecnico': { password: sha256('tecnico123'),  rol: 'empleado', nombre: 'Tecnico'       },
+};
+
+// Sesiones activas: token -> { username, rol, nombre, expires }
+const sesiones = new Map();
+
+function crearSesion(username) {
+  const user  = webUsers[username];
+  const token = crypto.randomBytes(32).toString('hex');
+  sesiones.set(token, {
+    username,
+    rol:     user.rol,
+    nombre:  user.nombre,
+    expires: Date.now() + 8 * 60 * 60 * 1000   // 8 horas
+  });
+  return token;
+}
+
+function verificarToken(token) {
+  if (!token || !sesiones.has(token)) return null;
+  const sess = sesiones.get(token);
+  if (Date.now() > sess.expires) { sesiones.delete(token); return null; }
+  return sess;
+}
+
+// Middleware: requiere sesion valida
+function requireAuth(req, res, next) {
+  const token = req.headers['x-token'] || req.query.token;
+  const sess  = verificarToken(token);
+  if (!sess) return res.status(401).json({ error: 'No autenticado' });
+  req.sesion = sess;
+  next();
+}
+
+// Middleware: requiere rol admin
+function requireAdmin(req, res, next) {
+  if (req.sesion?.rol !== 'admin') return res.status(403).json({ error: 'Sin permisos' });
+  next();
+}
 
 // ── Persistencia en disco ─────────────────────────────────────────
-const USERS_FILE  = path.join(__dirname, 'data', 'usuarios.json');
-const EVENTS_FILE = path.join(__dirname, 'data', 'eventos.json');
+const USERS_FILE    = path.join(__dirname, 'data', 'usuarios.json');
+const EVENTS_FILE   = path.join(__dirname, 'data', 'eventos.json');
+const HISTORIAL_FILE= path.join(__dirname, 'data', 'historial.json');
 
 function asegurarDirectorio() {
   const dir = path.join(__dirname, 'data');
@@ -38,8 +90,43 @@ function cargarUsuarios() {
   } catch(e) { console.error('Error cargando usuarios:', e.message); }
 }
 
-const MAX_EVENTOS = 500;
+const MAX_EVENTOS   = 500;
+const MAX_HISTORIAL = 2000;
 let eventosServidor = [];
+let historialPresiones = [];  // { ts, camara, p1, p2, setpoint, estado }
+
+function cargarHistorial() {
+  try {
+    if (!fs.existsSync(HISTORIAL_FILE)) return;
+    historialPresiones = JSON.parse(fs.readFileSync(HISTORIAL_FILE, 'utf8'));
+    console.log(`Historial cargado: ${historialPresiones.length} registros`);
+  } catch(e) {}
+}
+
+function guardarHistorial() {
+  try {
+    asegurarDirectorio();
+    fs.writeFileSync(HISTORIAL_FILE, JSON.stringify(historialPresiones.slice(0, MAX_HISTORIAL), null, 2));
+  } catch(e) {}
+}
+
+let ultimoGuardadoHistorial = 0;
+function registrarHistorial(camara, p1, p2, setpoint, estado) {
+  const ahora = Date.now();
+  if (ahora - ultimoGuardadoHistorial < 60000) return; // max 1 registro por minuto
+  ultimoGuardadoHistorial = ahora;
+  const entrada = {
+    ts:       new Date().toISOString(),
+    camara:   camara || 'camara1',
+    p1:       parseFloat(p1.toFixed(2)),
+    p2:       parseFloat(p2.toFixed(2)),
+    setpoint: parseFloat((setpoint||0).toFixed(2)),
+    estado:   estado || ''
+  };
+  historialPresiones.unshift(entrada);
+  if (historialPresiones.length > MAX_HISTORIAL) historialPresiones.pop();
+  guardarHistorial();
+}
 
 function registrarEvento(usuario, accion, detalle) {
   const ev = {
@@ -608,6 +695,9 @@ app.post('/actualizar', (req, res) => {
     registrarEvento('gateway', 'CAMBIO_PRESION', `P2: ${estadoAnterior.presionP2.toFixed(1)}→${p2Actual.toFixed(1)} PSI`);
   }
 
+  // Guardar en historial (max 1 vez/min)
+  registrarHistorial('camara1', camara1.presionP1, camara1.presionP2, camara1.setpoint, camara1.estado);
+
   // Devolver comando pendiente al gateway (si hay uno)
   const respActualizar = { ok: true };
   if (comandoPendiente) {
@@ -618,8 +708,29 @@ app.post('/actualizar', (req, res) => {
   res.json(respActualizar);
 });
 
+// ── Login / Logout ────────────────────────────────────────────────
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = webUsers[username];
+  if (!user || user.password !== sha256(password))
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  const token = crearSesion(username);
+  registrarEvento(username, 'LOGIN', `Rol: ${user.rol}`);
+  res.json({ ok: true, token, rol: user.rol, nombre: user.nombre });
+});
+
+app.post('/logout', (req, res) => {
+  const token = req.headers['x-token'];
+  if (token) sesiones.delete(token);
+  res.json({ ok: true });
+});
+
+app.get('/me', requireAuth, (req, res) => {
+  res.json({ username: req.sesion.username, rol: req.sesion.rol, nombre: req.sesion.nombre });
+});
+
 // ── API para el dashboard ─────────────────────────────────────────
-app.get('/datos', (req, res) => {
+app.get('/datos', requireAuth, (req, res) => {
   // Si no llegan datos hace más de 15s, mostrar como desconectado
   const sinDatos = !camara1.ultimaActualizacion ||
     (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 30000;
@@ -635,7 +746,7 @@ app.get('/datos', (req, res) => {
 });
 
 // ── Relay de comandos del dashboard al gateway ────────────────────
-app.get('/cmd', (req, res) => {
+app.get('/cmd', requireAuth, requireAdmin, (req, res) => {
   const cmd = (req.query.c || '').trim();
   if (!cmd) return res.status(400).json({ error: 'Sin comando' });
   comandoPendiente = cmd;
@@ -673,6 +784,15 @@ app.get('/simular-reset', (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Historial de presiones ────────────────────────────────────────
+app.get('/historial', (req, res) => {
+  const camara = req.query.camara || 'camara1';
+  const limite = Math.min(parseInt(req.query.limit) || 500, 2000);
+  const datos  = historialPresiones.filter(r => r.camara === camara).slice(0, limite);
+  res.json({ camara, total: datos.length, registros: datos });
+});
+
+
 // ── Log de eventos del servidor ───────────────────────────────────
 app.get('/eventos', (req, res) => {
   res.json(eventosServidor.slice(0, 200));
@@ -701,6 +821,9 @@ app.get('/camara1/boya', (req, res) => {
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/public/index.html');
 });
+app.get('/login', (req, res) => {
+  res.sendFile(__dirname + '/public/login.html');
+});
 
 // ── Registrar webhook de Telegram al arrancar ─────────────────────
 function registrarWebhook() {
@@ -728,6 +851,7 @@ app.listen(PORT, () => {
   console.log(`AutoVRP servidor corriendo en puerto ${PORT}`);
   cargarUsuarios();
   cargarEventos();
+  cargarHistorial();
   registrarEvento('sistema', 'SERVIDOR_INICIO', `Puerto ${PORT}`);
   registrarWebhook();
 });

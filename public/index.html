@@ -94,6 +94,31 @@
   .gauge-bar-wrap { width: 100%; height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
   .gauge-bar  { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
 
+  /* ── SEMAFORO ── */
+  .semaforo { display:flex; gap:5px; align-items:center; margin-top:8px; }
+  .sem-dot { width:12px; height:12px; border-radius:50%; opacity:0.25; transition:opacity 0.4s,box-shadow 0.4s; }
+  .sem-dot.on-verde  { background:#00e5a0; opacity:1; box-shadow:0 0 8px #00e5a0; }
+  .sem-dot.on-amari  { background:#ffc030; opacity:1; box-shadow:0 0 8px #ffc030; }
+  .sem-dot.on-rojo   { background:#ff4444; opacity:1; box-shadow:0 0 8px #ff4444; }
+  .sem-label { font-size:11px; color:var(--text2); margin-left:4px; }
+
+  /* ── ADMIN ONLY ── */
+  .admin-only { } /* se oculta por JS si rol=empleado */
+
+  /* ── TOOLTIP ── */
+  .tip { position: relative; }
+  .tip .tipbox {
+    display: none; position: absolute; z-index: 99;
+    top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: #0c1118; border: 1px solid #2a3a50; border-radius: 8px;
+    padding: 10px 14px; width: 240px; font-size: 12px; line-height: 1.6;
+    color: var(--text2); box-shadow: 0 8px 24px #00000080; pointer-events: none;
+  }
+  .tip .tipbox strong { color: var(--text1); display: block; margin-bottom: 4px; font-size: 13px; }
+  .tip .tipbox .tip-row { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; }
+  .tip .tipbox .tip-row span:last-child { color: var(--text1); font-family: Consolas, monospace; }
+  .tip:hover .tipbox { display: block; }
+
   /* ── ENV CARDS ── */
   .env-card { display: flex; align-items: center; gap: 14px; padding: 16px; }
   .env-icon { width: 44px; height: 44px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -302,10 +327,16 @@
   <div class="topbar-right">
     <div class="clock" id="clock">--:--:--</div>
     <div class="pill pill-green" id="statusPill"><span class="dot dot-green" id="statusDot"></span><span id="statusTxt">Sistema en linea</span></div>
-    <button class="btn-stop" onclick="pararMotor()">
+    <button class="btn-stop admin-only" onclick="pararMotor()">
       <svg viewBox="0 0 24 24" width="14" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
       PARADA DE EMERGENCIA
     </button>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#0c1520;border:1px solid #1a2535;border-radius:6px;font-size:11px;">
+      <svg viewBox="0 0 24 24" width="14" fill="none" stroke="#3a9aff" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span id="userNombre" style="color:#e0eaf4;font-weight:600">--</span>
+      <span id="userRolBadge" style="color:#7a9ab8;font-size:10px;text-transform:uppercase;letter-spacing:1px"></span>
+      <button onclick="cerrarSesion()" style="background:none;border:none;color:#ff4444;cursor:pointer;font-size:11px;margin-left:4px;font-family:inherit">Salir</button>
+    </div>
   </div>
 </div>
 
@@ -315,7 +346,15 @@
   <div class="row-gauges">
 
     <!-- P1 -->
-    <div class="panel">
+    <div class="panel tip">
+      <div class="tipbox">
+        <strong>Presión P1 — Aguas arriba</strong>
+        Mide la presión de entrada antes de la válvula reguladora piloto.
+        <div class="tip-row"><span>Ubicación</span><span>Línea de entrada</span></div>
+        <div class="tip-row"><span>Rango sensor</span><span>0 – 175 PSI</span></div>
+        <div class="tip-row"><span>Rol en PID</span><span>Límite máximo del setpoint</span></div>
+        <div class="tip-row"><span>P2 nunca puede superar P1</span></div>
+      </div>
       <div class="panel-head">
         <div class="panel-head-left">
           <span class="panel-tag">Presion P1 — Aguas arriba</span>
@@ -334,12 +373,26 @@
           <div class="gauge-mpa" id="mpaP1">-- MPa</div>
           <div class="gauge-scale"><span>0</span><span>87</span><span>175 PSI</span></div>
           <div class="gauge-bar-wrap"><div class="gauge-bar" id="barP1" style="width:0%;background:#3a9aff"></div></div>
+          <div class="semaforo">
+            <div class="sem-dot" id="s1v" title="Normal"></div>
+            <div class="sem-dot" id="s1a" title="Advertencia"></div>
+            <div class="sem-dot" id="s1r" title="Critico"></div>
+            <span class="sem-label" id="s1txt">--</span>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- P2 -->
-    <div class="panel">
+    <div class="panel tip">
+      <div class="tipbox">
+        <strong>Presión P2 — Aguas abajo</strong>
+        Mide la presión de salida después de la válvula reguladora.
+        <div class="tip-row"><span>Ubicación</span><span>Línea de salida</span></div>
+        <div class="tip-row"><span>Rango sensor</span><span>0 – 175 PSI</span></div>
+        <div class="tip-row"><span>Rol en PID</span><span>Variable controlada</span></div>
+        <div class="tip-row"><span>Setpoint actual</span><span id="tipSP">-- PSI</span></div>
+      </div>
       <div class="panel-head">
         <div class="panel-head-left">
           <span class="panel-tag">Presion P2 — Aguas abajo</span>
@@ -358,12 +411,26 @@
           <div class="gauge-mpa" id="mpaP2">-- MPa</div>
           <div class="gauge-scale"><span>0</span><span>87</span><span>175 PSI</span></div>
           <div class="gauge-bar-wrap"><div class="gauge-bar" id="barP2" style="width:0%;background:#00e5a0"></div></div>
+          <div class="semaforo">
+            <div class="sem-dot" id="s2v" title="Normal"></div>
+            <div class="sem-dot" id="s2a" title="Advertencia"></div>
+            <div class="sem-dot" id="s2r" title="Critico"></div>
+            <span class="sem-label" id="s2txt">--</span>
+          </div>
         </div>
       </div>
     </div>
 
     <!-- VALVULA -->
-    <div class="panel">
+    <div class="panel tip">
+      <div class="tipbox">
+        <strong>Válvula piloto reguladora</strong>
+        Válvula de presión piloto automatizada con motor NEMA17 + TB6600.
+        <div class="tip-row"><span>Recorrido total</span><span>17 vueltas</span></div>
+        <div class="tip-row"><span>Pasos por vuelta</span><span>2072 pasos</span></div>
+        <div class="tip-row"><span>Total pasos</span><span>35 224 pasos</span></div>
+        <div class="tip-row"><span>Control</span><span>PID automático</span></div>
+      </div>
       <div class="panel-head">
         <span class="panel-tag">Posicion valvula</span>
         <span class="panel-badge badge-blue" id="badgeValv">0%</span>
@@ -783,7 +850,7 @@ function spLocal(v) {
 }
 
 function enviarCmd(c, logMsg, logTipo) {
-  return fetch('/cmd?c=' + encodeURIComponent(c))
+  return apiFetch('/cmd?c=' + encodeURIComponent(c))
     .then(r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
@@ -827,7 +894,7 @@ function setClass(el, cls, on) {
 }
 
 function actualizar() {
-  fetch('/datos', { cache: 'no-store' }).then(r=>r.json()).then(d=>{
+  apiFetch('/datos', { cache: 'no-store' }).then(r=>r.json()).then(d=>{
 
     const p1  = d.presionP1  || 0;
     const p2  = d.presionP2  || 0;
@@ -854,6 +921,11 @@ function actualizar() {
 
     // Setpoint
     setTxt('maxPermit', Math.floor(p1-1));
+    setTxt('tipSP', (d.setpoint||0).toFixed(1)+' PSI');
+
+    // Semaforos P1 y P2 (umbrales: advertencia >70% del max, critico >90%)
+    actualizarSemaforo('s1v','s1a','s1r','s1txt', p1, p1*0.7 || 50, p1*0.9 || 80);
+    actualizarSemaforo('s2v','s2a','s2r','s2txt', p2, d.setpoint*1.1 || 20, d.setpoint*1.3 || 30);
     document.getElementById('sliderSP').max = Math.floor(p1-1);
 
     // Progreso PID
@@ -1209,8 +1281,54 @@ function actualizarMotor(d) {
   }
 }
 
+// ── AUTENTICACION ────────────────────────────────────────────────
+const vrpToken  = localStorage.getItem('vrp_token');
+const vrpRol    = localStorage.getItem('vrp_rol');
+const vrpNombre = localStorage.getItem('vrp_nombre');
+
+if (!vrpToken) { window.location.href = '/login'; }
+
+// Mostrar usuario en topbar
+document.getElementById('userNombre').textContent    = vrpNombre || '--';
+document.getElementById('userRolBadge').textContent  = vrpRol    || '';
+
+// Ocultar controles de admin si es empleado
+if (vrpRol !== 'admin') {
+  document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'none');
+}
+
+function cerrarSesion() {
+  fetch('/logout', { method:'POST', headers:{ 'x-token': vrpToken } }).finally(() => {
+    localStorage.clear();
+    window.location.href = '/login';
+  });
+}
+
+// Token en todas las peticiones al servidor
+function apiFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ 'x-token': vrpToken }, opts.headers || {});
+  return fetch(url, opts).then(r => {
+    if (r.status === 401) { localStorage.clear(); window.location.href = '/login'; }
+    return r;
+  });
+}
+
+// ── SEMAFORO ─────────────────────────────────────────────────────
+function actualizarSemaforo(idV, idA, idR, idTxt, psi, limAdv, limCrit) {
+  const v = document.getElementById(idV);
+  const a = document.getElementById(idA);
+  const r = document.getElementById(idR);
+  const t = document.getElementById(idTxt);
+  v.className = 'sem-dot'; a.className = 'sem-dot'; r.className = 'sem-dot';
+  if (psi === 0)          { t.textContent = 'Sin señal'; t.style.color = 'var(--text3)'; }
+  else if (psi < limAdv)  { v.classList.add('on-verde');  t.textContent = 'NORMAL';      t.style.color = '#00e5a0'; }
+  else if (psi < limCrit) { a.classList.add('on-amari');  t.textContent = 'ADVERTENCIA'; t.style.color = '#ffc030'; }
+  else                    { r.classList.add('on-rojo');   t.textContent = 'CRITICO';     t.style.color = '#ff4444'; }
+}
+
 // Log de arranque
-agregarLog('Dashboard AutoVRP iniciado','SYS');
+agregarLog('Dashboard AutoVRP iniciado — Usuario: '+(vrpNombre||'?')+' ('+vrpRol+')','SYS');
 agregarLog('Conectando con servidor Railway...','SYS');
 
 setInterval(actualizar, 2500);

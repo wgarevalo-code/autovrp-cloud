@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoVRP — Acceso</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:     #070d14;
+    --panel:  #0c1520;
+    --border: #1a2535;
+    --text1:  #e0eaf4;
+    --text2:  #7a9ab8;
+    --blue:   #3a9aff;
+    --green:  #00e5a0;
+    --red:    #ff4444;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text1);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 24px 64px #00000080;
+  }
+  .logo {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .logo svg { width: 48px; height: 48px; }
+  .logo h1 { font-size: 22px; font-weight: 700; margin-top: 12px; letter-spacing: 2px; }
+  .logo p  { font-size: 12px; color: var(--text2); margin-top: 4px; }
+
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
+  input {
+    width: 100%;
+    background: #070d14;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text1);
+    font-size: 14px;
+    padding: 11px 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    margin-bottom: 20px;
+  }
+  input:focus { border-color: var(--blue); }
+  .btn {
+    width: 100%;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 13px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .error {
+    background: #200010;
+    border: 1px solid #600030;
+    border-radius: 8px;
+    color: #ff6080;
+    font-size: 13px;
+    padding: 10px 14px;
+    margin-top: 16px;
+    display: none;
+  }
+  .footer { text-align: center; margin-top: 24px; font-size: 11px; color: var(--text2); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="24" cy="24" r="22" stroke="#3a9aff" stroke-width="2" fill="#0c1520"/>
+      <path d="M24 10 L24 24 L34 30" stroke="#00e5a0" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="24" cy="24" r="3" fill="#3a9aff"/>
+      <path d="M14 38 Q24 44 34 38" stroke="#3a9aff" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+    </svg>
+    <h1>AutoVRP</h1>
+    <p>Sistema de monitoreo de cámaras subterráneas</p>
+  </div>
+
+  <form id="form">
+    <label for="username">Usuario</label>
+    <input id="username" type="text" placeholder="Ingrese su usuario" autocomplete="username" required>
+
+    <label for="password">Contraseña</label>
+    <input id="password" type="password" placeholder="Ingrese su contraseña" autocomplete="current-password" required>
+
+    <button class="btn" type="submit" id="btn">INGRESAR</button>
+    <div class="error" id="error"></div>
+  </form>
+
+  <div class="footer">Cuenca, Ecuador &nbsp;•&nbsp; EMAC EP</div>
+</div>
+
+<script>
+document.getElementById('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('error');
+  btn.disabled = true;
+  btn.textContent = 'Verificando...';
+  err.style.display = 'none';
+
+  try {
+    const r = await fetch('/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('username').value.trim(),
+        password: document.getElementById('password').value
+      })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Error de acceso');
+    localStorage.setItem('vrp_token', d.token);
+    localStorage.setItem('vrp_rol',   d.rol);
+    localStorage.setItem('vrp_nombre',d.nombre);
+    window.location.href = '/';
+  } catch(ex) {
+    err.textContent = ex.message;
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'INGRESAR';
+  }
+});
+</script>
+</body>
+</html>
