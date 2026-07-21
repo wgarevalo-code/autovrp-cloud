@@ -654,6 +654,25 @@ app.get('/cmd-pendiente', (req, res) => {
   res.json({ cmd });
 });
 
+// ── Simulacion inundacion para demo ──────────────────────────────
+app.get('/simular-inundacion', (req, res) => {
+  const nivel = parseInt(req.query.nivel) || 2;
+  const dist  = 8;
+  camara1.nivelInundacion = nivel;
+  camara1.distanciaCM     = dist;
+  camara1.boyaMojada      = true;
+  enviarAlertaInundacion(nivel, dist, false);
+  registrarEvento('demo', 'SIMULAR_INUNDACION', `Nivel ${nivel}`);
+  res.json({ ok: true, nivel });
+});
+
+app.get('/simular-reset', (req, res) => {
+  camara1.nivelInundacion = 0;
+  camara1.boyaMojada      = false;
+  tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nSistema vuelve a estado normal.`);
+  res.json({ ok: true });
+});
+
 // ── Log de eventos del servidor ───────────────────────────────────
 app.get('/eventos', (req, res) => {
   res.json(eventosServidor.slice(0, 200));
