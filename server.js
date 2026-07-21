@@ -154,6 +154,9 @@ function cargarEventos() {
 const PORT         = process.env.PORT || 8080;
 const TG_TOKEN     = process.env.TG_TOKEN || '8820660886:AAHBrK9C2JZ_liCR4wkKSZUr7YEIy9Aek3s';
 const TG_API       = `https://api.telegram.org/bot${TG_TOKEN}`;
+const WA_TOKEN     = process.env.WA_TOKEN || '';
+const WA_PHONE_ID  = process.env.WA_PHONE_ID || '';
+const WA_TO        = process.env.WA_TO || '593984574173';
 
 // ── Sistema de roles ─────────────────────────────────────────────
 // ADMIN: puede controlar + recibe alertas + puede autorizar otros
@@ -260,6 +263,35 @@ function tgAnswerCallback(callbackId, texto) {
 
 function tgAlerta(texto) {
   chatsConAlertas().forEach(id => tgEnviar(id, texto));
+}
+
+// ── WhatsApp Cloud API ────────────────────────────────────────────
+function wappEnviar(texto) {
+  if (!WA_TOKEN || !WA_PHONE_ID) return;
+  const body = JSON.stringify({
+    messaging_product: 'whatsapp',
+    to: WA_TO,
+    type: 'text',
+    text: { body: texto }
+  });
+  const req = https.request({
+    hostname: 'graph.facebook.com',
+    path: `/v20.0/${WA_PHONE_ID}/messages`,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${WA_TOKEN}`,
+      'Content-Length': Buffer.byteLength(body)
+    }
+  });
+  req.on('error', e => console.error('WA error:', e.message));
+  req.write(body);
+  req.end();
+}
+
+function alerta(texto) {
+  tgAlerta(texto);
+  wappEnviar(texto.replace(/<[^>]+>/g, ''));
 }
 
 // Envia alerta de inundacion con boton de acuse
@@ -529,7 +561,7 @@ function procesarComando(chatId, texto, req) {
       if (!esAdmin(chatId)) { tgEnviar(chatId, '⛔ No tienes permiso para controlar la valvula.'); break; }
       registrarEvento(usuarios.get(chatId)?.nombre, 'PARADA_EMERGENCIA', 'via Telegram');
       tgEnviar(chatId, '🛑 <b>PARADA DE EMERGENCIA enviada al nodo.</b>');
-      tgAlerta(`🛑 <b>PARADA DE EMERGENCIA</b> activada por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
+      alerta(`🛑 <b>PARADA DE EMERGENCIA</b> activada por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
       break;
 
     case '/auto':
@@ -556,7 +588,7 @@ function procesarComando(chatId, texto, req) {
         } else {
           camara1.setpoint = sp;
           tgEnviar(chatId, `✅ <b>Setpoint actualizado a ${sp} PSI</b>`);
-          tgAlerta(`ℹ️ Setpoint cambiado a <b>${sp} PSI</b> por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
+          alerta(`ℹ️ Setpoint cambiado a <b>${sp} PSI</b> por ${usuarios.get(chatId)?.nombre || 'Admin'}`);
         }
       } else if (rol === 'pending') {
         tgEnviar(chatId, `⛔ <b>Acceso pendiente de autorizacion.</b>\nEl administrador del sistema debe autorizarte.\nTu Chat ID es: <code>${chatId}</code>\n\nComparte este ID con el administrador.`);
@@ -587,7 +619,7 @@ app.post(`/webhook/${TG_TOKEN}`, (req, res) => {
       detenerRepeticionAlarma();
       const nombre = usuarios.get(chatId)?.nombre || 'Usuario';
       tgAnswerCallback(cb.id, '✅ Acuse registrado');
-      tgAlerta(`✅ <b>Alerta acusada</b> por <b>${nombre}</b>\nSe detienen las repeticiones automaticas.`);
+      alerta(`✅ <b>Alerta acusada</b> por <b>${nombre}</b>\nSe detienen las repeticiones automaticas.`);
     } else if (data === 'ver_estado') {
       const d    = camara1;
       const sync = d.ultimaActualizacion ? new Date(d.ultimaActualizacion).toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' }) : '--';
@@ -644,24 +676,24 @@ app.post('/actualizar', (req, res) => {
     alarmaActiva  = false;
     alarmaAcusada = false;
     detenerRepeticionAlarma();
-    tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nEl nivel de agua volvio a normal.\n🕐 ${new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}`);
+    alerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nEl nivel de agua volvio a normal.\n🕐 ${new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' })}`);
     registrarEvento('gateway', 'INUNDACION_RESUELTA', 'Nivel volvio a 0');
   }
   estadoAnterior.nivelInundacion = nivelActual;
 
   if (!antMov && camara1.movimiento) {
-    tgAlerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
+    alerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
     registrarEvento('gateway', 'ALERTA_MOVIMIENTO', 'Movimiento detectado');
   }
 
   // Detectar cambio de modo MANUAL / AUTO en el nodo
   const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
   if (!estadoAnterior.nodoManual && camara1.nodoManual) {
-    tgAlerta(`🔧 <b>MODO MANUAL activado — Camara 1</b>\nTecnico en sitio. PID pausado.\n📊 P1: ${camara1.presionP1?.toFixed(1)} PSI | P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alerta(`🔧 <b>MODO MANUAL activado — Camara 1</b>\nTecnico en sitio. PID pausado.\n📊 P1: ${camara1.presionP1?.toFixed(1)} PSI | P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
     registrarEvento('nodo', 'MODO_MANUAL', 'Boton fisico activado en camara');
   }
   if (estadoAnterior.nodoManual && !camara1.nodoManual) {
-    tgAlerta(`🤖 <b>MODO AUTOMATICO restaurado — Camara 1</b>\nPID activo. Setpoint: ${camara1.setpoint?.toFixed(1)} PSI\n📊 P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alerta(`🤖 <b>MODO AUTOMATICO restaurado — Camara 1</b>\nPID activo. Setpoint: ${camara1.setpoint?.toFixed(1)} PSI\n📊 P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
     registrarEvento('nodo', 'MODO_AUTO', 'Sistema vuelve a control automatico');
   }
   estadoAnterior.nodoManual = camara1.nodoManual || false;
@@ -669,11 +701,11 @@ app.post('/actualizar', (req, res) => {
   // Notificar conexion / desconexion LoRa
   const rssiActual = camara1.rssi || 0;
   if (estadoAnterior.rssi === 0 && rssiActual !== 0) {
-    tgAlerta(`📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`);
+    alerta(`📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`);
     registrarEvento('gateway', 'LORA_CONECTADO', `RSSI: ${rssiActual} dBm`);
   }
   if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
-    tgAlerta(`📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alerta(`📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
     registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
   }
   estadoAnterior.rssi = rssiActual;
@@ -681,7 +713,7 @@ app.post('/actualizar', (req, res) => {
   // Notificar cuando PID alcanza el setpoint (flanco: no estaba → si esta)
   const enSetpointAhora = camara1.modoAuto && camara1.estado === 'EN SETPOINT';
   if (!estadoAnterior.enSetpoint && enSetpointAhora) {
-    tgAlerta(`✅ <b>Presion estabilizada — Camara 1</b>\nSetpoint alcanzado: <b>${camara1.setpoint?.toFixed(1)} PSI</b>\nP2 actual: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alerta(`✅ <b>Presion estabilizada — Camara 1</b>\nSetpoint alcanzado: <b>${camara1.setpoint?.toFixed(1)} PSI</b>\nP2 actual: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`);
     registrarEvento('gateway', 'SETPOINT_ALCANZADO', `P2: ${camara1.presionP2?.toFixed(1)} PSI | SP: ${camara1.setpoint?.toFixed(1)} PSI`);
   }
   estadoAnterior.enSetpoint = enSetpointAhora;
@@ -690,7 +722,7 @@ app.post('/actualizar', (req, res) => {
   const p2Actual = camara1.presionP2 || 0;
   if (Math.abs(p2Actual - estadoAnterior.presionP2) >= 2.0 && p2Actual > 0) {
     const dir = p2Actual > estadoAnterior.presionP2 ? '⬆️' : '⬇️';
-    tgAlerta(`${dir} <b>Presion P2 ajustada — Camara 1</b>\nAnterior: ${estadoAnterior.presionP2.toFixed(1)} PSI → Actual: ${p2Actual.toFixed(1)} PSI\nSetpoint: ${camara1.setpoint?.toFixed(1)} PSI\n🕐 ${hora}`);
+    alerta(`${dir} <b>Presion P2 ajustada — Camara 1</b>\nAnterior: ${estadoAnterior.presionP2.toFixed(1)} PSI → Actual: ${p2Actual.toFixed(1)} PSI\nSetpoint: ${camara1.setpoint?.toFixed(1)} PSI\n🕐 ${hora}`);
     estadoAnterior.presionP2 = p2Actual;
     registrarEvento('gateway', 'CAMBIO_PRESION', `P2: ${estadoAnterior.presionP2.toFixed(1)}→${p2Actual.toFixed(1)} PSI`);
   }
@@ -780,7 +812,7 @@ app.get('/simular-inundacion', (req, res) => {
 app.get('/simular-reset', (req, res) => {
   camara1.nivelInundacion = 0;
   camara1.boyaMojada      = false;
-  tgAlerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nSistema vuelve a estado normal.`);
+  alerta(`✅ <b>Inundacion resuelta — Camara 1</b>\nSistema vuelve a estado normal.`);
   res.json({ ok: true });
 });
 
