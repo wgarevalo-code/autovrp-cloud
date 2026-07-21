@@ -783,7 +783,7 @@ app.get('/datos', requireAuth, (req, res) => {
 });
 
 // ── Test WhatsApp (temporal, solo admin) ─────────────────────────
-app.get('/test-wapp', requireAuth, requireAdmin, (req, res) => {
+app.get('/test-wapp', (req, res) => {
   const msg = req.query.msg || '🔔 Prueba AutoVRP WhatsApp';
   wappEnviar(msg);
   res.json({ ok: true, to: WA_TO, phone_id: WA_PHONE_ID, token_ok: !!WA_TOKEN, msg });
