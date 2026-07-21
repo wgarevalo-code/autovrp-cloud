@@ -880,6 +880,20 @@ function registrarWebhook() {
   req.end();
 }
 
+// ── Watchdog: detecta desconexion del gateway independientemente ──
+setInterval(() => {
+  if (!camara1.ultimaActualizacion) return;
+  const sinDatos = (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 30000;
+  const rssiActual = sinDatos ? 0 : (camara1.rssi || 0);
+  const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
+
+  if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
+    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 2);
+    registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
+    estadoAnterior.rssi = 0;
+  }
+}, 10000); // chequea cada 10 segundos
+
 app.listen(PORT, () => {
   console.log(`AutoVRP servidor corriendo en puerto ${PORT}`);
   cargarUsuarios();
