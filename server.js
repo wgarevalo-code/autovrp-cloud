@@ -325,6 +325,10 @@ function enviarAlertaInundacion(nivel, dist, esRepeticion) {
   };
 
   chatsConAlertas().forEach(id => tgEnviar(id, texto, markup));
+
+  // WhatsApp: mensaje de texto plano sin HTML
+  const textoWA = `${emoji} ${nombre} — INUNDACION\n📍 Camara 1\n📏 Distancia: ${dist} cm\n🕐 ${hora}${esRepeticion ? `\n⏰ Repeticion #${alarmaRepeticion} — ACUSE PENDIENTE` : ''}\n\nResponde al bot de Telegram para acusar recibo.`;
+  wappEnviar(textoWA);
 }
 
 function iniciarRepeticionAlarma(nivel, dist) {
@@ -776,6 +780,13 @@ app.get('/datos', requireAuth, (req, res) => {
     respuesta.sinDatos = true;
   }
   res.json(respuesta);
+});
+
+// ── Test WhatsApp (temporal, solo admin) ─────────────────────────
+app.get('/test-wapp', requireAuth, requireAdmin, (req, res) => {
+  const msg = req.query.msg || '🔔 Prueba AutoVRP WhatsApp';
+  wappEnviar(msg);
+  res.json({ ok: true, to: WA_TO, phone_id: WA_PHONE_ID, token_ok: !!WA_TOKEN, msg });
 });
 
 // ── Relay de comandos del dashboard al gateway ────────────────────
