@@ -154,9 +154,9 @@ function cargarEventos() {
 const PORT         = process.env.PORT || 8080;
 const TG_TOKEN     = process.env.TG_TOKEN || '8820660886:AAHBrK9C2JZ_liCR4wkKSZUr7YEIy9Aek3s';
 const TG_API       = `https://api.telegram.org/bot${TG_TOKEN}`;
-const WA_TOKEN     = process.env.WA_TOKEN || '';
-const WA_PHONE_ID  = process.env.WA_PHONE_ID || '';
-const WA_TO        = process.env.WA_TO || '593984574173';
+const WA_TOKEN     = (process.env.WA_TOKEN || '').trim();
+const WA_PHONE_ID  = (process.env.WA_PHONE_ID || '').trim();
+const WA_TO        = (process.env.WA_TO || '593984574173').trim();
 
 // ── Sistema de roles ─────────────────────────────────────────────
 // ADMIN: puede controlar + recibe alertas + puede autorizar otros

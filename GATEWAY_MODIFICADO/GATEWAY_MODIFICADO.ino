@@ -345,6 +345,12 @@ void parsearRespuesta(String rxStr) {
     if (idxE < 0) idxE = rxStr.length();
     corrienteMA = rxStr.substring(idxI+3, idxE).toFloat();
   }
+  int idxLuz = rxStr.indexOf(" LUZ:");
+  if (idxLuz >= 0) {
+    int idxE = rxStr.indexOf(' ', idxLuz+1);
+    if (idxE < 0) idxE = rxStr.length();
+    luzEncendida = (rxStr.substring(idxLuz+5, idxE) == "1");
+  }
   // V: y W: no se envian en v2.0 del nodo
 }
 
