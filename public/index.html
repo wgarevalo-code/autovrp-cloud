@@ -469,7 +469,7 @@
     </div>
     <div class="panel env-card">
       <div class="env-icon" id="iconLuz" style="background:#201400;transition:background 0.3s"><svg viewBox="0 0 24 24" fill="none" stroke="#504030" stroke-width="2" id="svgLuz"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></svg></div>
-      <div style="flex:1"><div class="env-label">Iluminacion</div><div class="env-val" id="luzVal" style="font-size:16px;color:var(--text2)">Apagada</div><div class="env-state" id="movVal" style="color:var(--text3)">Sin movimiento</div></div>
+      <div style="flex:1"><div class="env-label">Iluminacion</div><div class="env-val" id="luzVal" style="font-size:16px;color:var(--text2)">Apagada</div></div>
       <button onclick="toggleLuz()" style="background:var(--bg);border:1px solid var(--border2);color:var(--text2);width:36px;height:36px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center" id="btnLuz">
         <svg viewBox="0 0 24 24" width="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4 12H1M23 12h-3"/></svg>
       </button>
@@ -491,10 +491,6 @@
   </div>
 
   <!-- ALERTA MOVIMIENTO -->
-  <div class="alerta-panel" id="alertaPanel">
-    <svg viewBox="0 0 24 24" width="22" fill="none" stroke="#ff4444" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
-    <div><div style="font-size:13px;font-weight:700;color:var(--red)">ALERTA — Movimiento detectado en la camara</div><div style="font-size:11px;color:#c47a7a;margin-top:2px" id="alertaHora">Acceso no autorizado</div></div>
-  </div>
 
   <!-- FILA 3: CONTROL + LORA -->
   <div class="row-main">
@@ -987,9 +983,6 @@ function actualizar() {
     setTxt('luzVal', luzOn?'Encendida':'Apagada');
     setStyle(document.getElementById('luzVal'),  'color',      luzOn?'#ffc030':'var(--text2)');
     setStyle(document.getElementById('iconLuz'), 'background', luzOn?'#201000':'#201400');
-    setTxt('movVal', d.movimiento?'!! Movimiento detectado !!':'Sin movimiento');
-    setStyle(document.getElementById('movVal'),  'color', d.movimiento?'#ff4444':'var(--text3)');
-    setClass(document.getElementById('alertaPanel'), 'show', !!d.movimiento);
 
     // LoRa
     setTxt('rssiTxt',    (d.rssi||0)+' dBm');
