@@ -665,22 +665,24 @@ app.post('/actualizar', (req, res) => {
 
   camara1 = { ...camara1, ...d, ultimaActualizacion: new Date().toISOString() };
 
-  // Si el nodo no está conectado, limpiar datos que vienen del nodo
-  if (!camara1.rssi || camara1.rssi === 0 || d.nodoConectado === false) {
-    camara1.presionP1    = 0;
-    camara1.presionP2    = 0;
-    camara1.humedad      = 0;
-    camara1.temperatura  = 0;
-    camara1.distanciaCM  = 0;
+  // Si el nodo no está conectado, limpiar datos del nodo
+  const nodoOff = d.nodoConectado === false || d.nodoConectado === 'false' || camara1.rssi === 0;
+  if (nodoOff) {
+    camara1.presionP1       = 0;
+    camara1.presionP2       = 0;
+    camara1.humedad         = 0;
+    camara1.temperatura     = 0;
+    camara1.distanciaCM     = 0;
     camara1.nivelInundacion = 0;
-    camara1.boyaMojada   = false;
-    camara1.rssi         = 0;
-    camara1.barras       = 0;
-    camara1.calidad      = 'Sin senal';
-    camara1.nodoConectado = false;
+    camara1.boyaMojada      = false;
+    camara1.rssi            = 0;
+    camara1.barras          = 0;
+    camara1.calidad         = 'Sin senal';
+    camara1.nodoConectado   = false;
+    camara1.estado          = 'SIN NODO';
   }
 
-  if (typeof d.presionP2 === 'number' && camara1.rssi !== 0) {
+  if (typeof d.presionP2 === 'number' && !nodoOff) {
     camara1.historial.push(d.presionP2);
     if (camara1.historial.length > 30) camara1.historial.shift();
   }
