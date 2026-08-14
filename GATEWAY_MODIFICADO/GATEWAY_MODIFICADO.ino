@@ -152,8 +152,10 @@ void enviarTelegramGeneral(String mensaje) {
 }
 
 void verificarAlertas() {
-  // ── Nodo desconectado / reconectado ──────────────────────────
-  if (!nodoConectado && !alertaNodoEnviada) {
+  // ── Nodo desconectado / sin conexion desde arranque ──────────
+  // Avisa si: nunca conectó (>12s desde boot) O se cayó
+  bool sinNodo = !nodoConectado && (millis() - ultimaRespuestaNodo > TIMEOUT_NODO);
+  if (sinNodo && !alertaNodoEnviada) {
     alertaNodoEnviada = true;
     enviarTelegramNodo("Nodo DESCONECTADO - Sin respuesta LoRa (>12s)");
     Serial.println("ALERTA: nodo desconectado");
@@ -526,6 +528,7 @@ void setup() {
   if (r != RADIOLIB_ERR_NONE) { estadoActual = "ERR LORA"; dibujarOLED(); while(true); }
   radio.setDio1Action(isrRX);
   radio.startReceive();
+  ultimaRespuestaNodo = millis(); // arranca el temporizador desde el inicio
   estadoActual = "ESCUCHANDO"; dibujarOLED();
   Serial.println("Gateway listo");
 }
@@ -534,8 +537,8 @@ void loop() {
   if (wifiConectado) server.handleClient();
 
   // ── Deteccion nodo desconectado (12s sin respuesta = muerto) ─────
-  if (ultimaRespuestaNodo > 0 && nodoConectado &&
-      millis() - ultimaRespuestaNodo > TIMEOUT_NODO) {
+  // Detecta nodo muerto: tanto si nunca conecto como si se cayo
+  if (millis() - ultimaRespuestaNodo > TIMEOUT_NODO && nodoConectado) {
     nodoConectado = false;
     estadoActual  = "SIN NODO";
     rssiVal       = 0;
