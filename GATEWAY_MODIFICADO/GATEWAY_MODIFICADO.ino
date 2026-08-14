@@ -50,7 +50,7 @@ bool  nodoManual      = false;
 
 // ── Deteccion nodo desconectado ───────────────────────────────────
 unsigned long ultimaRespuestaNodo = 0;
-#define TIMEOUT_NODO 12000   // 12s sin respuesta = nodo muerto
+#define TIMEOUT_NODO 12000
 bool nodoConectado     = false;
 bool alertaNodoEnviada = false;
 
@@ -60,9 +60,9 @@ bool alertaP2AltaEnviada     = false;
 unsigned long tgUltimoNodo       = 0;
 unsigned long tgUltimoInundacion = 0;
 unsigned long tgUltimoGeneral    = 0;
-#define TG_MIN_NODO       5000   // 5s minimo entre alertas de nodo
-#define TG_MIN_INUNDACION 8000   // 8s minimo entre alertas de inundacion
-#define TG_MIN_GENERAL    10000  // 10s minimo para mensajes generales
+#define TG_MIN_NODO       5000
+#define TG_MIN_INUNDACION 8000
+#define TG_MIN_GENERAL    10000
 
 // ── PID ──────────────────────────────────────────────────────────
 float setpointPSI   = 20.0;
@@ -152,9 +152,8 @@ void enviarTelegramGeneral(String mensaje) {
 }
 
 void verificarAlertas() {
-  // ── Nodo desconectado / sin conexion desde arranque ──────────
-  // Avisa si: nunca conectó (>12s desde boot) O se cayó
   bool sinNodo = !nodoConectado && (millis() - ultimaRespuestaNodo > TIMEOUT_NODO);
+
   if (sinNodo && !alertaNodoEnviada) {
     alertaNodoEnviada = true;
     enviarTelegramNodo("Nodo DESCONECTADO - Sin respuesta LoRa (>12s)");
@@ -165,7 +164,6 @@ void verificarAlertas() {
     enviarTelegramNodo("Nodo reconectado - RSSI:" + String(rssiVal) + "dBm");
   }
 
-  // ── Inundacion nivel peligro ──────────────────────────────────
   if (nivelInundacion >= 3 && !alertaInundacionEnviada) {
     alertaInundacionEnviada = true;
     enviarTelegramInundacion("PELIGRO INUNDACION - Nivel critico! Dist:" + String(distanciaCM) + "cm");
@@ -515,7 +513,6 @@ void setup() {
     server.begin();
     estadoActual = "WiFi OK";
     Serial.println("WiFi conectado");
-    // Pequena pausa para que el cooldown no bloquee alertas futuras
     tgUltimoGeneral = millis();
     enviarTelegramGeneral("AutoVRP Gateway en linea - Esperando nodo LoRa");
   } else {
@@ -528,7 +525,10 @@ void setup() {
   if (r != RADIOLIB_ERR_NONE) { estadoActual = "ERR LORA"; dibujarOLED(); while(true); }
   radio.setDio1Action(isrRX);
   radio.startReceive();
-  ultimaRespuestaNodo = millis(); // arranca el temporizador desde el inicio
+
+  // Arranca el temporizador desde el boot para detectar nodo ausente desde inicio
+  ultimaRespuestaNodo = millis();
+
   estadoActual = "ESCUCHANDO"; dibujarOLED();
   Serial.println("Gateway listo");
 }
@@ -536,9 +536,8 @@ void setup() {
 void loop() {
   if (wifiConectado) server.handleClient();
 
-  // ── Deteccion nodo desconectado (12s sin respuesta = muerto) ─────
-  // Detecta nodo muerto: tanto si nunca conecto como si se cayo
-  if (millis() - ultimaRespuestaNodo > TIMEOUT_NODO && nodoConectado) {
+  // ── Deteccion nodo caido (estaba conectado y dejo de responder) ──
+  if (nodoConectado && millis() - ultimaRespuestaNodo > TIMEOUT_NODO) {
     nodoConectado = false;
     estadoActual  = "SIN NODO";
     rssiVal       = 0;
@@ -591,10 +590,7 @@ void loop() {
       nodoConectado = true;
       ultimaRespuestaNodo = millis();
       estadoActual = "CONECTADO";
-      if (primerConexion) {
-        Serial.println("Nodo conectado RSSI:" + String(rssiVal));
-        // No usar tgUltimoNodo aqui: el cooldown corre independiente
-      }
+      if (primerConexion) Serial.println("Nodo conectado RSSI:" + String(rssiVal));
       Serial.println("RX: " + rxStr + " RSSI:" + String(rssiVal));
       if (rxStr.startsWith("OK")) parsearRespuesta(rxStr);
     }
@@ -602,6 +598,6 @@ void loop() {
     dibujarOLED();
   }
 
-  // ── Verificar alertas (cooldowns independientes) ──────────────
+  // ── Verificar alertas ─────────────────────────────────────────
   verificarAlertas();
 }
