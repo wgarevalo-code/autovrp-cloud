@@ -571,16 +571,11 @@
   </div>
 
   <!-- FILA 4: INSTRUMENTACION NODO — INA219 + DHT11 -->
-  <div class="panel">
+  <div class="panel" style="display:none">
     <div class="panel-head">
       <div class="panel-head-left">
         <span class="panel-tag">Instrumentacion — Nodo valvula piloto</span>
         <span class="panel-badge badge-blue" id="motorEstBadge">EN LINEA</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:20px;font-size:10px;color:var(--text3);letter-spacing:1px">
-        <span>INA219 · SDA=41 SCL=42</span>
-        <span>DHT11 · GPIO38</span>
-        <span>NEMA17 · TB6600</span>
       </div>
     </div>
     <div class="panel-body" style="padding:0">
@@ -919,9 +914,9 @@ function actualizar() {
     setTxt('maxPermit', Math.floor(p1-1));
     setTxt('tipSP', (d.setpoint||0).toFixed(1)+' PSI');
 
-    // Semaforos P1 y P2 (umbrales: advertencia >70% del max, critico >90%)
-    actualizarSemaforo('s1v','s1a','s1r','s1txt', p1, p1*0.7 || 50, p1*0.9 || 80);
-    actualizarSemaforo('s2v','s2a','s2r','s2txt', p2, d.setpoint*1.1 || 20, d.setpoint*1.3 || 30);
+    // Semaforos P1 y P2
+    actualizarSemaforoP1(p1);
+    actualizarSemaforoP2(p2);
     document.getElementById('sliderSP').max = Math.floor(p1-1);
 
     // Progreso PID
@@ -1308,16 +1303,49 @@ function apiFetch(url, opts) {
 }
 
 // ── SEMAFORO ─────────────────────────────────────────────────────
-function actualizarSemaforo(idV, idA, idR, idTxt, psi, limAdv, limCrit) {
-  const v = document.getElementById(idV);
-  const a = document.getElementById(idA);
-  const r = document.getElementById(idR);
-  const t = document.getElementById(idTxt);
+// P1 aguas arriba: critico si cae a 0
+function actualizarSemaforoP1(p1) {
+  const v = document.getElementById('s1v');
+  const a = document.getElementById('s1a');
+  const r = document.getElementById('s1r');
+  const t = document.getElementById('s1txt');
   v.className = 'sem-dot'; a.className = 'sem-dot'; r.className = 'sem-dot';
-  if (psi === 0)          { t.textContent = 'Sin señal'; t.style.color = 'var(--text3)'; }
-  else if (psi < limAdv)  { v.classList.add('on-verde');  t.textContent = 'NORMAL';      t.style.color = '#00e5a0'; }
-  else if (psi < limCrit) { a.classList.add('on-amari');  t.textContent = 'ADVERTENCIA'; t.style.color = '#ffc030'; }
-  else                    { r.classList.add('on-rojo');   t.textContent = 'CRITICO';     t.style.color = '#ff4444'; }
+  if (p1 === 0) {
+    r.classList.add('on-rojo');
+    t.textContent = 'CRITICO'; t.style.color = '#ff4444';
+    document.getElementById('badgeP1').textContent  = 'SIN PRESION';
+    document.getElementById('badgeP1').className    = 'panel-badge badge-red';
+  } else {
+    v.classList.add('on-verde');
+    t.textContent = 'NORMAL'; t.style.color = '#00e5a0';
+    document.getElementById('badgeP1').textContent = 'ESTATICO';
+    document.getElementById('badgeP1').className   = 'panel-badge badge-blue';
+  }
+}
+
+// P2 aguas abajo: critico si cae a 0 o si supera 60 PSI (riesgo rotura)
+function actualizarSemaforoP2(p2) {
+  const v = document.getElementById('s2v');
+  const a = document.getElementById('s2a');
+  const r = document.getElementById('s2r');
+  const t = document.getElementById('s2txt');
+  v.className = 'sem-dot'; a.className = 'sem-dot'; r.className = 'sem-dot';
+  if (p2 === 0) {
+    r.classList.add('on-rojo');
+    t.textContent = 'CRITICO'; t.style.color = '#ff4444';
+    document.getElementById('badgeP2').textContent = 'SIN PRESION';
+    document.getElementById('badgeP2').className   = 'panel-badge badge-red';
+  } else if (p2 >= 60) {
+    r.classList.add('on-rojo');
+    t.textContent = 'SOBREPRESION'; t.style.color = '#ff4444';
+    document.getElementById('badgeP2').textContent = 'SOBREPRESION';
+    document.getElementById('badgeP2').className   = 'panel-badge badge-red';
+  } else {
+    v.classList.add('on-verde');
+    t.textContent = 'NORMAL'; t.style.color = '#00e5a0';
+    document.getElementById('badgeP2').textContent = 'EN LINEA';
+    document.getElementById('badgeP2').className   = 'panel-badge badge-green';
+  }
 }
 
 // Log de arranque
