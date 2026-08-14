@@ -213,7 +213,7 @@ let camara1 = {
 };
 
 // Estado anterior para detectar alertas
-let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0, rssi: 0, enSetpoint: false };
+let estadoAnterior = { boyaMojada: false, movimiento: false, nivelInundacion: 0, nodoManual: false, presionP2: 0, rssi: 0, enSetpoint: false, gatewayOnline: false };
 
 // Cooldown para alertas repetitivas (ms)
 const alertaCooldown = {};
@@ -493,7 +493,7 @@ function procesarComando(chatId, texto, req) {
         `  Temperatura: ${d.temperatura.toFixed(1)} °C\n\n` +
         `<b>Seguridad:</b>\n` +
         `  Boya: ${d.boyaMojada ? '🚨 MOJADA' : '✅ Seca'}\n` +
-        `  Movimiento: ${d.movimiento ? '⚠️ Detectado' : '✅ Sin movimiento'}\n` +
+        `  Distancia sensor: ${d.distanciaCM} cm\n` +
         `  Luz: ${d.luzEncendida ? '💡 Encendida' : '⚫ Apagada'}\n\n` +
         `<b>Control:</b>\n` +
         `  Modo: ${d.modoAuto ? 'AUTO PID' : 'MANUAL'}\n` +
@@ -694,10 +694,6 @@ app.post('/actualizar', (req, res) => {
   }
   estadoAnterior.nivelInundacion = nivelActual;
 
-  if (!antMov && camara1.movimiento) {
-    alerta('⚠️ <b>ALERTA MOVIMIENTO</b>\nSe detecto movimiento en la Camara 1.\nAcceso no autorizado.');
-    registrarEvento('gateway', 'ALERTA_MOVIMIENTO', 'Movimiento detectado');
-  }
 
   // Detectar cambio de modo MANUAL / AUTO en el nodo
   const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
@@ -711,14 +707,20 @@ app.post('/actualizar', (req, res) => {
   }
   estadoAnterior.nodoManual = camara1.nodoManual || false;
 
-  // Notificar conexion / desconexion LoRa
+  // Marcar gateway como en linea
+  const eraGatewayOnline = estadoAnterior.gatewayOnline;
+  estadoAnterior.gatewayOnline = true;
+  // Limpiar cooldown de gateway offline al reconectarse
+  if (!eraGatewayOnline) delete alertaCooldown['gateway_offline'];
+
+  // Notificar conexion / desconexion del nodo LoRa
   const rssiActual = camara1.rssi || 0;
   if (estadoAnterior.rssi === 0 && rssiActual !== 0) {
-    alertaConCooldown('lora_online', `📡 <b>Gateway en linea — Camara 1</b>\nEnlace LoRa establecido\nRSSI: ${rssiActual} dBm | ${camara1.calidad}\n🕐 ${hora}`, 2);
+    alertaConCooldown('lora_nodo_online', `📡 <b>Nodo LoRa reconectado — Camara 1</b>\nEnlace restaurado | RSSI: <b>${rssiActual} dBm</b> (${camara1.calidad})\n📊 P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 2);
     registrarEvento('gateway', 'LORA_CONECTADO', `RSSI: ${rssiActual} dBm`);
   }
   if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
-    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 2);
+    alertaConCooldown('lora_nodo_offline', `📵 <b>Sin enlace LoRa — Camara 1</b>\nEl nodo no responde al gateway.\nUltimo RSSI: <b>${estadoAnterior.rssi} dBm</b>\n🕐 ${hora}`, 2);
     registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
   }
   estadoAnterior.rssi = rssiActual;
@@ -770,7 +772,7 @@ app.get('/me', requireAuth, (req, res) => {
 app.get('/datos', requireAuth, (req, res) => {
   // Si no llegan datos hace más de 15s, mostrar como desconectado
   const sinDatos = !camara1.ultimaActualizacion ||
-    (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 30000;
+    (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 15000;
   const respuesta = { ...camara1, historial: camara1.historial };
   if (sinDatos) {
     respuesta.rssi    = 0;
@@ -894,14 +896,21 @@ function registrarWebhook() {
 // ── Watchdog: detecta desconexion del gateway independientemente ──
 setInterval(() => {
   if (!camara1.ultimaActualizacion) return;
-  const sinDatos = (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 30000;
-  const rssiActual = sinDatos ? 0 : (camara1.rssi || 0);
+  const sinDatos = (Date.now() - new Date(camara1.ultimaActualizacion).getTime()) > 15000;
   const hora = new Date().toLocaleTimeString('es-EC', { timeZone: 'America/Guayaquil' });
 
-  if (estadoAnterior.rssi !== 0 && rssiActual === 0) {
-    alertaConCooldown('lora_offline', `📵 <b>Gateway sin señal — Camara 1</b>\nSe perdio el enlace LoRa con el nodo.\nUltima P2: ${camara1.presionP2?.toFixed(1)} PSI\n🕐 ${hora}`, 2);
-    registrarEvento('gateway', 'LORA_PERDIDO', `Ultimo RSSI: ${estadoAnterior.rssi} dBm`);
+  if (sinDatos && estadoAnterior.gatewayOnline) {
+    // Gateway se desconecto de la red (sin corriente o sin WiFi)
+    estadoAnterior.gatewayOnline = false;
     estadoAnterior.rssi = 0;
+    const msg =
+      `🔴 <b>GATEWAY DESCONECTADO — Camara 1</b>\n` +
+      `Sin datos por mas de 15 segundos.\n` +
+      `Verificar alimentacion electrica y WiFi.\n` +
+      `📊 Ultima P2: <b>${camara1.presionP2?.toFixed(1)} PSI</b>\n` +
+      `🕐 ${hora}`;
+    alerta(msg);
+    registrarEvento('gateway', 'GATEWAY_OFFLINE', `Ultima actualizacion: ${camara1.ultimaActualizacion}`);
   }
 }, 10000); // chequea cada 10 segundos
 
